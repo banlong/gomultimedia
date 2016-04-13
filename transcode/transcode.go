@@ -1,4 +1,4 @@
-package transcoding
+package ffmpeg
 
 import (
 	"fmt"
@@ -7,11 +7,12 @@ import (
 	"os/exec"
 	"strconv"
 	"container/list"
-	"goAV/config"
+	"gomultimedia/config"
 	"strings"
-	"goAV/tools"
+	"gomultimedia/tools"
 	"io/ioutil"
 	"path"
+
 )
 
 func init() {
@@ -49,32 +50,29 @@ func Transcode(oldFile string, destDir string,  name string, ext string) error {
 
 // SPLIT ONE MP4 INTO MULTIPLE MP4s WITH SAME LENGTH (SECONDS), n: seconds
 func Split(input string, seconds int, outputDir string, videoId string, ext string) (*list.List, error){
-	log.Println("Start splitting origin video...")
+	log.Println("-- Splitting video...", input)
 
 	//Make sure temp folder exist
-	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-		err := os.MkdirAll(outputDir,0711)
-		if err != nil {
-			log.Println("Error creating temp directory")
-			return list.New(),err
-		}
+	err := tools.CreateDir(outputDir)
+	if(err != nil){
+		return list.New(), err
 	}
 
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
 	// OPT 2 - Split input file into equally files with segment in seconds, -vcodec will allow split AVI
 	cmd := config.FFMPEG + " -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
-			" -f segment " + outputDir + videoId + "-%04d" + ext
+			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
 
 //	cmd := config.FFMPEG + " -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
 //	" -f segment " + outputDir + videoId + "-%04d" + ext
 	/* -------------------------------------------------------------------------------------------------- */
 	//log.Println("cmd:" ,cmd)
-	err := exec.Command("bash", "-c", cmd).Run()
+	err = exec.Command("bash", "-c", cmd).Run()
 	if err != nil {
-		log.Println("Split failure!", err.Error())
+		log.Println("--Split failure!", err.Error())
 		return list.New(), err
 	} else {
-		log.Println("Split file completed")
+		log.Println("-- Split file completed")
 		names:= tools.GetFileNames(outputDir)
 		return names, nil
 	}
@@ -360,4 +358,35 @@ func Demux(video string, audio string, newfile string)  error{
 		log.Println("-- demux completed.")
 		return nil
 	}
+}
+
+func Extract(input string, vOuput string, aOutput string)  error{
+	//extractStart := time.Now()
+	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
+	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
+
+	//log.Println("vCmd", vCmd)
+	//log.Println("aCmd", aCmd)
+	//ffmpeg -i input.mkv # show stream numbers and formats
+	//ffmpeg -i input.mkv -c copy audio.m4a # AAC
+	//ffmpeg -i input.mkv -c copy audio.mp3 # MP3
+	//ffmpeg -i input.mkv -c copy audio.ac3 # AC3
+	//ffmpeg -i input.mkv -an -c copy video.mkv
+	//ffmpeg -i input.mkv -map 0:1 -c copy audio.m4a # stream 1
+
+	err := exec.Command("bash", "-c", vCmd).Run()
+	if err != nil {
+		log.Println("-- extract video failed, ", err)
+		return err
+	}
+
+	err = exec.Command("bash", "-c", aCmd).Run()
+	if err != nil {
+		log.Println("-- extract audio failed, ", err)
+		return err
+	}
+
+	//extractTime :=  time.Since(extractStart)
+	//log.Println("Processing time: ", extractTime)
+	return nil
 }

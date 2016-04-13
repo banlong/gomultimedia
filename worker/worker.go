@@ -3,7 +3,7 @@ package worker
 import (
 	"sync"
 	"log"
-	"goAV/transcode"
+	"gomultimedia/transcode"
 )
 
 type Args struct{
@@ -15,7 +15,7 @@ type Args struct{
 type Worker struct{
 	Id int
 	InputChan chan *Args
-	Wg sync.WaitGroup
+	Wg *sync.WaitGroup
 }
 
 func (w *Worker) Run(){
@@ -23,7 +23,7 @@ func (w *Worker) Run(){
 	log.Printf("Worker %d started", w.Id)
 	for input:= range w.InputChan{
 		//call rpc method of the client to get Multiplication result
-		transcoding.Transcode(input.SrcFile, input.DestDir, input.Name, ".mp4")
+		ffmpeg.Transcode(input.SrcFile, input.DestDir, input.Name, ".mp4")
 		w.Wg.Done()
 	}
 }
