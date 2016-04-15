@@ -21,11 +21,37 @@ func init() {
 }
 
 // MY TRANSCODER
-func Transcode(oldFile string, destDir string,  name string, ext string) error {
+func Transcode(oldFile string, destDir string,  name string, compressLevel string, quantizer string) error {
+	//Compress Level Preset
+	//1. ultrafast			4. faster			7. slow
+	//2. superfast			5. fast				8. slower
+	//3. veryfast			6. medium			9. veryslow
+
+	//Constant Rate Factor (CRF) - The range of the quantizer scale is 0-51
+	// A lower value is a higher quality and a subjectively sane range is 18-28.
+	//  0 - lossless
+	// 23 - default
+	// 51 - worst
+	// input quantizer : hq(18), lq(28), md(23)
+	var qStr string
+	switch quantizer {
+	case "hq":
+		qStr = " -crf 18"
+	case "lq":
+		qStr = " -crf 32"
+	default:
+		qStr = " -crf 23"
+	}
+
+	//comment it out if you do not want to see the debug info
+	var debug string
+	//debug = " -report "
+
+	//-crf 22
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
 	//Cut2it define
 	cmd := fmt.Sprintln(config.FFMPEG + " -i " + oldFile +
-	" -y -c:v libx264 -preset ultrafast -threads 0 -c:a aac -strict -2 " + destDir + name + ext )
+	" -y -c:v libx264 -preset " + compressLevel + qStr + debug + " -threads 0 -c:a aac -strict -2 " + destDir + name)
 
 
 	//cmd := fmt.Sprintln("ffmpeg -i " + oldFile + " -c:v libx264 -preset ultrafast -threads 0 " +
@@ -317,7 +343,7 @@ func Mux(video string, audio string, newfile string)  error{
 	log.Println(file)
 
 	log.Println(tools.IsExist(video))
-	err := Transcode(video, dir, "videot", ".mp4")
+	err := Transcode(video, dir, "videot.mp4", "ultrafast", "mq")
 	if err != nil {
 		log.Println("-- transcode failed, ", err)
 		return err
@@ -360,7 +386,7 @@ func Demux(video string, audio string, newfile string)  error{
 	}
 }
 
-func Extract(input string, vOuput string, aOutput string)  error{
+func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//extractStart := time.Now()
 	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
 	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
@@ -388,5 +414,19 @@ func Extract(input string, vOuput string, aOutput string)  error{
 
 	//extractTime :=  time.Since(extractStart)
 	//log.Println("Processing time: ", extractTime)
+	return nil
+}
+
+func ExtractElementaryStream(input string, vOuput string) error{
+	//Extract the raw video codec data as it is.
+	//The extracted elementary streams are lacking the Video Object Layer (VOL) and the upper layers.
+	// An extracted elementary stream by FFmpeg contains just sequence of Video Object Plane (VOP).
+	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vcodec copy -an -y -f m4v " + vOuput)
+	log.Println(vCmd)
+	err := exec.Command("bash", "-c", vCmd).Run()
+	if err != nil {
+		log.Println("-- extract video failed, ", err)
+		return err
+	}
 	return nil
 }

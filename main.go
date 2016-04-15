@@ -20,10 +20,59 @@ func main(){
 	//It seems that Split-Extract-Encode have more advantage on the processing time. However this model have to
 	//go with a method to stream video with different languages and resolution like HLS and MPEG DASH. Otherwise,
 	//mux audio and video and streaming the whole mp4 will make these balance ie no improvement
-	SplitEncodeExtract()
-	SplitExtractEncode()
+	//SplitEncodeExtract()
+	//SplitExtractEncode()
+
+	//Produce different video
+	//ProduceVideos("C:/Users/nghiepnds/Desktop/wt02.mp4") 	//ave 4.30 for 1.6GB
+	//ProduceVideos("videos/sample.mp4")					// 730ms - 1MB
+	//ProduceVideos("videos/tth.mp4")							// 7.8ms - 5MB
+
+	//Extract video stream
+	ExtractElementaryStream()
 }
 
+func ExtractElementaryStream()  {
+	input := "videos/sample.mp4"
+	output := "videos/sample.m4v"
+	err := ffmpeg.ExtractElementaryStream(input, output)
+	if err != nil{
+		log.Println(err.Error())
+	}else{
+		log.Println("finished")
+	}
+}
+func ProduceVideos(input string)  {
+	//Test Result: bigger file size-> processing time increases exponentially
+	// 4.3m - 1.6GB
+	//730ms - 1MB
+	//7.8s  - 5MB
+
+	tools.CreateDir("videos/produced/")
+
+	//Create video at different resolutions
+	proStart := time.Now()
+
+	fastStart := time.Now()
+	ffmpeg.Transcode(input, "videos/produced/", "high.mp4", "ultrafast", "hq")
+	fastTime := time.Since(fastStart)
+
+	mediumStart := time.Now()
+	ffmpeg.Transcode(input, "videos/produced/", "medium.mp4", "ultrafast", "mq")
+	mediumTime := time.Since(mediumStart)
+
+	slowStart := time.Now()
+	ffmpeg.Transcode(input, "videos/produced/", "low.mp4", "ultrafast", "lq")
+	slowTime := time.Since(slowStart)
+
+	proTime := time.Since(proStart)
+
+	log.Println("PROCESSING TIME - ", proTime)
+	log.Println("--------------------------------")
+	log.Println("Fast Time: ", fastTime)
+	log.Println("Medium Time: ", mediumTime)
+	log.Println("Slow Time: ", slowTime)
+}
 
 func SplitExtractEncode() error{
 	//This will split upload file ->  extract seg to a/v -> encode non-audio segs
@@ -60,7 +109,7 @@ func SplitExtractEncode() error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.Extract(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
+		err = ffmpeg.ExtractAV(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
 		if err != nil{
 			return err
 		}
@@ -81,7 +130,7 @@ func SplitExtractEncode() error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.Transcode(filename, encodeDir , name, ".mp4")
+		err = ffmpeg.Transcode(filename, encodeDir , name + ".mp4", "ultrafast", "mq")
 		if err != nil{
 			return err
 		}
@@ -130,7 +179,7 @@ func SplitAndExtract()  error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.Extract(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
+		err = ffmpeg.ExtractAV(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
 		if err != nil{
 			return err
 		}
@@ -185,7 +234,7 @@ func SplitEncodeExtract()  error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.Transcode(filename, encodeDir , name, ".mp4")
+		err = ffmpeg.Transcode(filename, encodeDir , name +".mp4", "ultrafast", "mq")
 		if err != nil{
 			return err
 		}
@@ -210,7 +259,7 @@ func SplitEncodeExtract()  error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.Extract(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
+		err = ffmpeg.ExtractAV(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
 		if err != nil{
 			return err
 		}
@@ -231,7 +280,7 @@ func SplitEncodeExtract()  error{
 
 func Extract()  {
 	input := "videos/sample.mkv"
-	ffmpeg.Extract(input, "noaudio.m4v", "novideo.mp3")
+	ffmpeg.ExtractAV(input, "noaudio.m4v", "novideo.mp3")
 }
 
 func TestMux() {
@@ -294,7 +343,7 @@ func TestSplitAndMerge()  {
 			chunkFile := tempDir + nameElement.Value.(string)
 			go func(srcFile string, i int) {
 				log.Printf("Worker %d started \n", i)
-				ffmpeg.Transcode(chunkFile, trcdDir, tools.ZeroPad(i,3), ".mp4")
+				ffmpeg.Transcode(chunkFile, trcdDir, tools.ZeroPad(i,3) + ".mp4", "ultrafast", "mq")
 				waitGroup.Done()
 				log.Printf("Worker %d exit \n", i)
 			}(chunkFile, i)

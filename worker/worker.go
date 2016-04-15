@@ -23,7 +23,7 @@ func (w *Worker) Run(){
 	log.Printf("Worker %d started", w.Id)
 	for input:= range w.InputChan{
 		//call rpc method of the client to get Multiplication result
-		ffmpeg.Transcode(input.SrcFile, input.DestDir, input.Name, ".mp4")
+		ffmpeg.Transcode(input.SrcFile, input.DestDir, input.Name + ".mp4", "ultrafast", "mq")
 		w.Wg.Done()
 	}
 }
