@@ -14,6 +14,8 @@ import (
 	"strings"
 	"path"
 	"time"
+	"flag"
+	"gomultimedia/mp4"
 )
 
 func main(){
@@ -29,7 +31,10 @@ func main(){
 	//ProduceVideos("videos/tth.mp4")							// 7.8ms - 5MB
 
 	//Extract video stream
-	ExtractElementaryStream()
+	//ExtractElementaryStream()
+
+	//Extract moov atom
+	TestMP4()
 }
 
 func ExtractElementaryStream()  {
@@ -42,6 +47,7 @@ func ExtractElementaryStream()  {
 		log.Println("finished")
 	}
 }
+
 func ProduceVideos(input string)  {
 	//Test Result: bigger file size-> processing time increases exponentially
 	// 4.3m - 1.6GB
@@ -443,6 +449,27 @@ func monitorWorker(wg *sync.WaitGroup, jc chan *worker.Args ) {
 	wg.Wait()
 	close(jc)
 }
+
+func TestMP4() {
+	var inputFile string
+	var f *mp4.File
+
+	flag.StringVar(&inputFile, "i", "", "-i videos/sample.mp4")
+	flag.Parse()
+
+	if inputFile == "" {
+		flag.Usage()
+		return
+	}
+	f, err := mp4.Open(inputFile)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+	defer f.Close()
+
+}
+
 
 
 
