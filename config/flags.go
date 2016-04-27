@@ -10,6 +10,8 @@ const (
 	FFPROB_PRO  string = "/opt/ffmpeg/ffprobe"
 	FFMPEG_LC	string = "ffmpeg"
 	FFPROB_LC   string = "ffprobe"
+	MP4BOX  	string = "MP4Box"
+	MP4EDIT  	string = "mp4edit"
 
 	ROOT_DIR	string = "tmp/transcode-buffer/"
 	STREAM_PUBLIC_URL	string	= "http://beta.cut2it.com"

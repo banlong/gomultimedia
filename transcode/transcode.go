@@ -389,7 +389,8 @@ func Demux(video string, audio string, newfile string)  error{
 func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//extractStart := time.Now()
 	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
-	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
+	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
+	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
 
 	//log.Println("vCmd", vCmd)
 	//log.Println("aCmd", aCmd)
@@ -417,6 +418,32 @@ func ExtractAV(input string, vOuput string, aOutput string)  error{
 	return nil
 }
 
+func MP4BoxExtractAudio(input string, vOuput string, aOutput string)  error{
+	//extractStart := time.Now()
+
+	//vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
+	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
+	aCmd := fmt.Sprintln("mp4box -raw 2 " + input + " -out " + aOutput)
+
+
+
+//	err := exec.Command("bash", "-c", vCmd).Run()
+//	if err != nil {
+//		log.Println("-- extract video failed, ", err)
+//		return err
+//	}
+
+	err := exec.Command("bash", "-c", aCmd).Run()
+	if err != nil {
+		log.Println("-- extract audio failed, ", err)
+		return err
+	}
+
+	//extractTime :=  time.Since(extractStart)
+	//log.Println("Processing time: ", extractTime)
+	return nil
+}
+
 func ExtractElementaryStream(input string, vOuput string) error{
 	//Extract the raw video codec data as it is.
 	//The extracted elementary streams are lacking the Video Object Layer (VOL) and the upper layers.
@@ -426,6 +453,38 @@ func ExtractElementaryStream(input string, vOuput string) error{
 	err := exec.Command("bash", "-c", vCmd).Run()
 	if err != nil {
 		log.Println("-- extract video failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func DashPackage(input string, output string, profile string)error{
+	// -dash [DURATION]: enables MPEG-DASH segmentation, creating segments of the given duration (in milliseconds).
+	// We advise you to set the duration to 2 seconds for Live and short VOD files, and 5 seconds for long VOD videos.
+	// -rap -frag-rap: forces segments to begin with Random Access Points. Mandatory to have a working playback.
+	// –profile [PROFILE]: MPEG-DASH profile. Set it to 'onDemand' for VOD videos, and 'live' for live streams.
+	// -out [path/to/outpout.file]: output file location. This parameter is optional: by default, MP4box will create an
+	// output.mpd file and the corresponding output.mp4 files in the current directory.
+	// [path/to/input1.file]…: indicates where your input mp4 files are. They can be video or audio files.
+
+	cmd := fmt.Sprintln(config.MP4BOX + " -dash 2000 -rap -frag-rap -profile onDemand -out " + output + " " + input)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- dashed failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func RemoveMp4Moov(input string, output string) error {
+	//Remove the moov & ftyp atom from the mp4 file
+	//Limitation: only work with video frag file
+	cmd := fmt.Sprintln(config.MP4EDIT + " --remove moov --remove ftyp " + input + " " + output)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- atom edit failed, ", err)
 		return err
 	}
 	return nil

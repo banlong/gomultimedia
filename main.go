@@ -16,15 +16,18 @@ import (
 	"time"
 	"flag"
 	"gomultimedia/mp4"
+	"io/ioutil"
 )
 
 func main(){
+
+	//Extract()
 	//It seems that Split-Extract-Encode have more advantage on the processing time. However this model have to
 	//go with a method to stream video with different languages and resolution like HLS and MPEG DASH. Otherwise,
 	//mux audio and video and streaming the whole mp4 will make these balance ie no improvement
 	//SplitEncodeExtract()
 	//SplitExtractEncode()
-
+	//SplitAndExtract()
 	//Produce different video
 	//ProduceVideos("C:/Users/nghiepnds/Desktop/wt02.mp4") 	//ave 4.30 for 1.6GB
 	//ProduceVideos("videos/sample.mp4")					// 730ms - 1MB
@@ -34,7 +37,41 @@ func main(){
 	//ExtractElementaryStream()
 
 	//Extract moov atom
-	TestMP4()
+	//TestMP4()
+
+	//Remove MOOV, FTYP
+	RemoveMoovs("trim/", "frag/", "nomoov/")
+}
+
+func RemoveMoovs(dir string, fragDir string, nomoovDir string){
+	//Read the directory
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//Create output folder
+	err = tools.CreateDir(fragDir)
+	err = tools.CreateDir(nomoovDir)
+	if err != nil {
+		log.Fatal(err)
+	}
+	//Write the file names to the file
+	for _, file := range files {
+		names := strings.Split(file.Name(),".")
+		name := names[0]
+
+		//Dash Fragment
+		input:= dir +  file.Name()
+		output:= fragDir + file.Name()
+		ffmpeg.DashPackage(input, output, "onDemand")
+
+		//Remove atoms
+		input = fragDir + name + "_dashinit.mp4"
+		output = nomoovDir + file.Name()
+		ffmpeg.RemoveMp4Moov(input, output)
+	}
+
 }
 
 func ExtractElementaryStream()  {
@@ -185,7 +222,7 @@ func SplitAndExtract()  error{
 		//log.Println("File: ", filename)
 		//log.Println("Name: ", name)
 
-		err = ffmpeg.ExtractAV(filename, videoDir + name + ".mp4" , audioDir + name + ".mp3")
+		err = ffmpeg.ExtractAV(filename, videoDir + name + ".mp4" , audioDir + name + ".aac")
 		if err != nil{
 			return err
 		}
@@ -285,7 +322,7 @@ func SplitEncodeExtract()  error{
 }
 
 func Extract()  {
-	input := "videos/sample.mkv"
+	input := "videos/sample.mp4"
 	ffmpeg.ExtractAV(input, "noaudio.m4v", "novideo.mp3")
 }
 
