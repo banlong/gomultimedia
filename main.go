@@ -1,7 +1,5 @@
 //CONVERT A VIDEO
-//Have to install the ffmpeg build version, set path to its \bin so that
-//we can call ffmpeg
-//the wrapper does not working
+//Have to install the ffmpeg build version, set path to its \bin so that we can call ffmpeg
 
 package main
 import (
@@ -17,30 +15,127 @@ import (
 	"flag"
 	"gomultimedia/mp4"
 	"io/ioutil"
+	"strconv"
+	"fmt"
+	"gomultimedia/config"
+	"os/exec"
 )
 
 func main(){
 
-	//Extract()
-	//It seems that Split-Extract-Encode have more advantage on the processing time. However this model have to
-	//go with a method to stream video with different languages and resolution like HLS and MPEG DASH. Otherwise,
-	//mux audio and video and streaming the whole mp4 will make these balance ie no improvement
-	//SplitEncodeExtract()
-	//SplitExtractEncode()
-	//SplitAndExtract()
-	//Produce different video
-	//ProduceVideos("C:/Users/nghiepnds/Desktop/wt02.mp4") 	//ave 4.30 for 1.6GB
-	//ProduceVideos("videos/sample.mp4")					// 730ms - 1MB
-	//ProduceVideos("videos/tth.mp4")							// 7.8ms - 5MB
+	SplitBenchmark()
 
-	//Extract video stream
-	//ExtractElementaryStream()
+	//TranscodeAndSplit()
+}
 
-	//Extract moov atom
-	//TestMP4()
+func TranscodeAndSplit()  {
+	tempDir := "avisplit/"
+	filename := "videos/avi/s02.avi"
+	mp4filename := "videos/avi/s02.mp4"
+	dur, _ := ffmpeg.GetAviDuration(filename)
+	start := time.Now()
+	trxn := time.Now()
 
-	//Remove MOOV, FTYP
-	RemoveMoovs("trim/", "frag/", "nomoov/")
+	tcmd := config.FFMPEG + " -i " + filename + " -c:v libx264 -c:a aac -y " + mp4filename
+	log.Println("cmd:" ,tcmd)
+	err := exec.Command("bash", "-c", tcmd).Run()
+	if err != nil {
+		log.Println("--Tran failure!, Id: ",  err.Error())
+	}
+	log.Println("--Tran completed ")
+	trxnDur :=  time.Since(trxn)
+
+	splitStart := time.Now()
+	scmd := config.FFMPEG + " -i " + mp4filename + " -c copy -map 0 -segment_time 3 -f segment " + tempDir + "%04d.mp4"
+	err = exec.Command("bash", "-c", scmd).Run()
+	if err != nil {
+		log.Println("--Split failure!, Id: ",  err.Error())
+	}
+	log.Println("--Split completed ")
+	splitDur := time.Since(splitStart)
+
+	end := time.Since(start)
+
+	log.Println("File Size : ", tools.GetFileSize(filename))
+	log.Println("Trxn time: ", trxnDur)
+	log.Println("Split time: ", splitDur)
+	log.Println("Total time: ", end)
+	log.Println("Video Duration  : ", dur)
+
+	//Result
+	//File Size :  59206048
+	//Trxn time:  56.3484465s
+	//Split time:  544.1756ms
+	//Total time:  56.8913655s
+	//Duration  :  0:06:29.522856
+	//Segment: 125
+	//Quality: better than segment & transcode at the same time
+	//Output size: 41.6M
+
+
+}
+
+func SplitBenchmark()  {
+	//logifle, _ :=os.Create("log.txt")
+	//log.SetOutput(logifle)
+
+	tempDir := "avisplit/"
+	filename := "videos/avi/s02.avi"
+	//filename := "C:/Users/nghiepnds/Desktop/videos"
+	dur, _ := ffmpeg.GetAviDuration(filename)
+	start := time.Now()
+	names, _ := ffmpeg.SplitAvi(filename, 3 , tempDir, "s02-", ".mp4", false)
+	end := time.Since(start)
+
+	log.Println("File Size : ", tools.GetFileSize(filename))
+	log.Println("Split time: ", end)
+	log.Println("Segments  : ", names.Len())
+	log.Println("Duration  : ", dur)
+
+	//File Size :  59206048
+	//Total time:  1m36.3981337s
+	//Segments  :  130
+	//Duration  :  0:06:29.522856
+	//Audio play early in the first segment
+	//Slower than transcode & split
+	//Output size: 42.6M
+}
+
+func produceDashLive(){
+}
+
+func ProduceDashSegment(input string, outTran string, outDir string, mpdFile string) error {
+	//Transcode with fix frame rate
+//	cmd := fmt.Sprintln(config.FFMPEG + " -report -i " + input +
+//	" -y -c:v libx264 -preset ultrafast -crf 32 -threads 0 -c:a aac -strict -2 -b:v 64k -bufsize 64k -r 30 -ar 44100 ") + outDir + outTran
+
+	cmd := fmt.Sprintln(config.FFMPEG + " -i " + input +
+	" -y -c:v libx264 -preset ultrafast -crf 32 -threads 0 -c:a aac -strict -2 -b:v 64k -bufsize 64k -r 30 -ar 44100 " + outDir + outTran)
+
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- trans failed, ", err)
+		return err
+	}
+
+	//Dash the file
+	cmdB := fmt.Sprintln(config.MP4BOX + " -dash 3000 -frag 3000 -rap -segment-name s_ " + outDir +  outTran)
+	log.Println(cmdB)
+	err = exec.Command("bash", "-c", cmdB).Run()
+	if err != nil {
+		log.Println("-- dashed failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func CatAndFrag()  {
+	//Concat segment File
+	ffmpeg.MP4BoxConcat("trim/", "cat/", "cat.mp4" )
+
+	//Frag file
+	ffmpeg.DashPackage("cat/cat.mp4", "cat/frag.mp4")
 }
 
 func RemoveMoovs(dir string, fragDir string, nomoovDir string){
@@ -57,14 +152,17 @@ func RemoveMoovs(dir string, fragDir string, nomoovDir string){
 		log.Fatal(err)
 	}
 	//Write the file names to the file
+	segId := 0
 	for _, file := range files {
 		names := strings.Split(file.Name(),".")
 		name := names[0]
+		segIdStr := strconv.Itoa(segId)
+		segId++
 
 		//Dash Fragment
 		input:= dir +  file.Name()
 		output:= fragDir + file.Name()
-		ffmpeg.DashPackage(input, output, "onDemand")
+		ffmpeg.DashPackageWithSequence(input, output, "onDemand", segIdStr)
 
 		//Remove atoms
 		input = fragDir + name + "_dashinit.mp4"
@@ -76,7 +174,7 @@ func RemoveMoovs(dir string, fragDir string, nomoovDir string){
 
 func ExtractElementaryStream()  {
 	input := "videos/sample.mp4"
-	output := "videos/sample.m4v"
+	output := "video.h264"
 	err := ffmpeg.ExtractElementaryStream(input, output)
 	if err != nil{
 		log.Println(err.Error())
@@ -326,6 +424,34 @@ func Extract()  {
 	ffmpeg.ExtractAV(input, "noaudio.m4v", "novideo.mp3")
 }
 
+func ExtractAndMux()  {
+	input := "videos/TTH.mp4"
+
+	//Extract
+	ffmpeg.ExtractAV(input, "video.mp4", "audio.aac")
+	log.Println("extract complete")
+
+	//Mux - not work with .h264 video
+	//ffmpeg.Mux("noaudio.h264", "novideo.aac", "out.mp4")
+
+	//work with .h264 video
+	ffmpeg.MP4BoxMux("video.mp4", "audio.aac", "out.mp4")
+}
+
+func ExtractTranscodeMux()  {
+	//This prove that transcode can be done on .h264
+	input := "videos/TTH.mp4"
+
+	//Extract
+	ffmpeg.ExtractAV(input, "noaudio.h264", "novideo.aac")
+	log.Println("extract complete")
+
+	ffmpeg.Transcode("noaudio.h264", "", "noaudioTranscoded.h264", "ultrafast", "mq" )
+
+	//ffmpeg does not work with .h264 video
+	ffmpeg.MP4BoxMux("noaudioTranscoded.h264", "novideo.aac", "out.mp4")
+}
+
 func TestMux() {
 	//video := "videos/noaudio.tmp"
 	//audio := "videos/novideo.mp3"
@@ -353,7 +479,7 @@ func TestDemux() {
 }
 
 func TestSplitAndMerge()  {
-	srcFile := "videos/tth.mp4"
+	srcFile := "videos/quangha.mp4"
 	namesFile := "list.txt"
 	tempDir := "videos/temp/"
 	trcdDir := "videos/trcd/"

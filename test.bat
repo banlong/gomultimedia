@@ -1,0 +1,2 @@
+ffmpeg -i videos/avi/s02.avi -y -c:v libx264 -preset ultrafast -crf 23 -report  -threads 0 -c:a aac -strict -2 videos/avi/s02b.mp4
+ffmpeg  -i videos/avi/s02b.mp4 -c copy -map 0 -segment_time 3 -f segment avisplit/%04d.mp4

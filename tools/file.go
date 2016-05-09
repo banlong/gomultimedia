@@ -157,3 +157,77 @@ func IsExist(file string) bool{
 		return true
 	}
 }
+
+func Rename(oldFile string, newFile string) error{
+	err :=  os.Rename(oldFile, newFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
+func DurationToSeconds(duration string) string {
+	//input must be hh:mm:ss
+	timepot := strings.Split(duration, ":")
+	if(len(timepot)<3){
+		log.Println("len:", len(timepot))
+		return ""
+	}
+
+	hh := timepot[0]
+	mm := timepot[1]
+	ss := timepot[2]
+
+	//	log.Println("hh:", hh)
+	//	log.Println("mm:", mm)
+	//	log.Println("ss:", ss)
+
+	hv, _ := strconv.Atoi(hh)
+	mv, _ := strconv.Atoi(mm)
+	sv, _ := strconv.Atoi(ss)
+
+	val := hv*3600 + mv*60 + sv
+	retval := strconv.Itoa(val)
+	return retval
+}
+
+func TimeStampToSeconds(duration string) int {
+	//input must be hh:mm:ss
+	timepot := strings.Split(duration, ":")
+	if(len(timepot)<3){
+		log.Println("len:", len(timepot))
+		return 0
+	}
+
+	hh := timepot[0]
+	mm := timepot[1]
+	ss := timepot[2]
+
+	//	log.Println("hh:", hh)
+	//	log.Println("mm:", mm)
+	//	log.Println("ss:", ss)
+
+	hv, _ := strconv.Atoi(hh)
+	mv, _ := strconv.Atoi(mm)
+	sv, _ := strconv.Atoi(ss)
+
+	val := hv*3600 + mv*60 + sv
+	return val
+}
+
+
+func GetFileSize(filePath string) int64{
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0
+	}
+	defer file.Close()
+
+	// get the file size
+	stat, err := file.Stat()
+	if err != nil {
+		return 0
+	}
+	return stat.Size()
+}

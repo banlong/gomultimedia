@@ -45,7 +45,7 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 
 	//comment it out if you do not want to see the debug info
 	var debug string
-	//debug = " -report "
+	debug = " -report "
 
 	//-crf 22
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
@@ -63,7 +63,7 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 	//To force the frame rate of the output file to 24 fps:
 	//cmd := fmt.Sprintln("ffmpeg -i " + oldFile + " -r 24 " + newName)
 	/* -------------------------------------------------------------------------------------------------- */
-	//log.Println("Command :" + cmd)
+	log.Println("Command :" + cmd)
 	err := exec.Command("bash", "-c", cmd).Run()
 
 	if err != nil {
@@ -86,13 +86,22 @@ func Split(input string, seconds int, outputDir string, videoId string, ext stri
 
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
 	// OPT 2 - Split input file into equally files with segment in seconds, -vcodec will allow split AVI
-	cmd := config.FFMPEG + " -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
-			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
+//	cmd := config.FFMPEG + " -report -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+//			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
 
-//	cmd := config.FFMPEG + " -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
-//	" -f segment " + outputDir + videoId + "-%04d" + ext
+//	cmd := config.FFMPEG + " -report -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+//	" -f segment " + outputDir +  "%04d" + ext
+
+//	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -f segment -segment_time " + strconv.Itoa(seconds) +
+//	" -vcodec copy -reset_timestamps 1 -map 0 -an " + outputDir +  "%04d" + ext
+
+	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
+
+	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+		" -f segment " + outputDir +  "%04d" + ext
+
 	/* -------------------------------------------------------------------------------------------------- */
-	//log.Println("cmd:" ,cmd)
+	log.Println("cmd:" ,cmd)
 	err = exec.Command("bash", "-c", cmd).Run()
 	if err != nil {
 		log.Println("--Split failure!", err.Error())
@@ -133,7 +142,7 @@ func Merge(namesFile string, outputFolder string, outputFile string) error{
 	}
 }
 
-// GET SEGMENT DURATION
+// GET SEGMENT DURATION - Return time in seconds
 func GetSegmentDuration(segmentFilePath string) (string, error) {
 
 	cmdStr := config.FFMPEG + " -i '" + segmentFilePath +
@@ -211,7 +220,7 @@ func GetResolution(file string) (int, int, error) {
 	}
 }
 
-// GET SEGMENT DURATION v2
+// GET SEGMENT DURATION v2 - Return time in hh:mm:ss.ssss
 func GetDuration(file string) (string, error) {
 	cmd := fmt.Sprintln(config.FFPROBE + " -v error -show_entries format=duration" +
 								" -of default=noprint_wrappers=1:nokey=1 -sexagesimal " + file)
@@ -228,6 +237,82 @@ func GetDuration(file string) (string, error) {
 		return string(out[:len(out)-8]), nil
 	}
 
+}
+
+// GET SEGMENT DURATION v2 - Return time in hh:mm:ss.ssss
+func GetAviDuration(file string) (string, error) {
+	cmd := fmt.Sprintln(config.FFPROBE + " -v error -loglevel quiet -show_entries format=duration" +
+	" -of default=noprint_wrappers=1:nokey=1 -sexagesimal " + file)
+
+	out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
+
+	if err != nil {
+		log.Println(err.Error())
+		return "", err
+	} else {
+		return string(out), nil
+	}
+}
+
+
+func SplitAvi(input string, seconds int, outputDir string, name string, ext string, debug bool)  (*list.List, error){
+	//This slower than transcode & split
+	log.Println("-- Splitting AVI video...", input)
+	var report string
+	if(debug){
+		report = " -report "
+	}else{
+		report = ""
+	}
+	//Make sure temp folder exist
+	err := tools.CreateDir(outputDir)
+	if(err != nil){
+		return list.New(), err
+	}
+
+	//Get duration
+	names := list.New()
+	segmentId := 1
+	dur, err := GetAviDuration(input)					//hh:mm:ss.ms
+	if(err != nil){
+		names.PushBack(name + tools.ZeroPad(segmentId, 4) + ext)
+		return names, err
+	}
+	hms := strings.Split(dur, ".")						//hh:mm:ss
+	durInSeconds := tools.TimeStampToSeconds(hms[0])		//int, ex 35
+	log.Println("Total seconds:", durInSeconds)
+	log.Println("Split...")
+	for i := 0; i < durInSeconds; i += seconds {
+		ss := " -ss " + GetTimeStamp(i)
+		tt := " -t " + strconv.Itoa(seconds)
+		//Split file, this is fast seeker but a litter not exact as the slow seeker
+		cmd := config.FFMPEG + report  + ss +  tt +  " -i " + input + " -c:v libx264 -c:a aac -y " + outputDir + name + tools.ZeroPad(segmentId, 4) + ext
+
+		//Slow seeker, very slow, consume double time
+		//cmd := config.FFMPEG + report  + ss + " " + tt +  " -i " + input + " -acodec copy -vcodec copy " + " -y " + outputDir + name + tools.ZeroPad(segmentId, 4) + ext
+		log.Println("cmd:" ,cmd)
+		err = exec.Command("bash", "-c", cmd).Run()
+		if err != nil {
+			log.Println("--Split failure!, Id: ", segmentId, err.Error())
+		} else {
+			names.PushBack(name + tools.ZeroPad(segmentId, 4) + ext)
+			segmentId++
+		}
+	}
+
+	return names, nil
+}
+
+func GetTimeStamp(durationInSeconds int) string  {
+	hours	:= durationInSeconds/3600
+	minutes := (durationInSeconds-hours*3600)/60
+	seconds := (durationInSeconds-hours*3600 -minutes*60)
+
+	hh:= tools.ZeroPad(hours, 2)
+	mm:= tools.ZeroPad(minutes,2)
+	ss:= tools.ZeroPad(seconds,2)
+
+	return (hh + ":" + mm +":" + ss)
 }
 
 // CREATE MERGE LIST INTO A TEXT FILE, Using for Merging Video Files
@@ -342,21 +427,35 @@ func Mux(video string, audio string, newfile string)  error{
 	log.Println(dir)
 	log.Println(file)
 
-	log.Println(tools.IsExist(video))
-	err := Transcode(video, dir, "videot.mp4", "ultrafast", "mq")
-	if err != nil {
-		log.Println("-- transcode failed, ", err)
-		return err
-	} else {
-		log.Println("-- transcode completed.")
-	}
-	log.Println(err)
-	srcVStream := dir + "videot" +  ".mp4"
-	log.Println(srcVStream)
+//	log.Println(tools.IsExist(video))
+//	err := Transcode(video, dir, "videot.mp4", "ultrafast", "mq")
+//	if err != nil {
+//		log.Println("-- transcode failed, ", err)
+//		return err
+//	} else {
+//		log.Println("-- transcode completed.")
+//	}
+//	log.Println(err)
+//	srcVStream := dir + "videot" +  ".mp4"
+//	log.Println(srcVStream)
 
 
-	cmd := fmt.Sprintln(config.FFMPEG + " -i " + srcVStream + " -i " + audio +
-	" -c:v copy -c:a aac -strict experimental  -y " + newfile)
+	//Mux h264 & aac with FFMPEG is not successful, log said the h264 is not valid
+//	cmd := fmt.Sprintln(config.FFMPEG + " -report  -i " + video + " -i " + audio +
+//	" -vcodec copy -acodec copy -absf aac_adtstoasc  -y " + newfile)
+
+	//This give similiar result as above, "noaudio.h264: Invalid data found when processing input"
+//	cmd := fmt.Sprintln(config.FFMPEG + " -report  -i " + video + " -i " + audio +
+//	" -c:v copy -c:a aac -strict experimental -y " + newfile)
+
+	//Mux using MP4 Box, not working "cannot find H264 start code"
+	//cmd := fmt.Sprintln(config.MP4BOX + " -fps 23.976 -add " + video + " -add " + audio + " " + newfile)
+
+	//result: "noaudio.h264: Invalid data found when processing input"
+	cmd := fmt.Sprintln(config.FFMPEG + " -framerate 25  -report  -i " + video + " -i " + audio +
+	" -codec copy -y " + newfile)
+
+	log.Println(cmd)
 	errs := exec.Command("bash", "-c", cmd).Run()
 	if errs != nil {
 		log.Println("-- muxing was failed, ", errs)
@@ -368,7 +467,6 @@ func Mux(video string, audio string, newfile string)  error{
 
 
 }
-
 
 // DEMUX AUDIO from VIDEO
 // Replace sound track in the video with an input audio
@@ -388,19 +486,13 @@ func Demux(video string, audio string, newfile string)  error{
 
 func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//extractStart := time.Now()
-	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
+	//vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
+	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vcodec copy -an -bsf:v h264_mp4toannexb " + vOuput)
+	log.Println("vCmd:" , vCmd)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
-	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
-
-	//log.Println("vCmd", vCmd)
-	//log.Println("aCmd", aCmd)
-	//ffmpeg -i input.mkv # show stream numbers and formats
-	//ffmpeg -i input.mkv -c copy audio.m4a # AAC
-	//ffmpeg -i input.mkv -c copy audio.mp3 # MP3
-	//ffmpeg -i input.mkv -c copy audio.ac3 # AC3
-	//ffmpeg -i input.mkv -an -c copy video.mkv
-	//ffmpeg -i input.mkv -map 0:1 -c copy audio.m4a # stream 1
-
+	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
+	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
+	log.Println("aCmd:" , aCmd)
 	err := exec.Command("bash", "-c", vCmd).Run()
 	if err != nil {
 		log.Println("-- extract video failed, ", err)
@@ -444,6 +536,26 @@ func MP4BoxExtractAudio(input string, vOuput string, aOutput string)  error{
 	return nil
 }
 
+func MP4BoxMux(video string, audio string, newfile string)error{
+	//Mux using MP4 Box, not working "cannot find H264 start code"
+	//cmd := fmt.Sprintln(config.MP4BOX + " -fps 23.976 -add " + video + " -add " + audio + " " + newfile)
+	cmd := fmt.Sprintln("mp4box -add " + video + " -add " + audio + " " + newfile)
+
+	//result: "noaudio.h264: Invalid data found when processing input"
+	//cmd := fmt.Sprintln(config.FFMPEG + " -framerate 25  -report  -i " + video + " -i " + audio +
+	//" -codec copy -y " + newfile)
+
+	log.Println(cmd)
+	errs := exec.Command("bash", "-c", cmd).Run()
+	if errs != nil {
+		log.Println("-- muxing was failed, ", errs)
+		return errs
+	} else {
+		log.Println("-- muxing completed.")
+		return nil
+	}
+}
+
 func ExtractElementaryStream(input string, vOuput string) error{
 	//Extract the raw video codec data as it is.
 	//The extracted elementary streams are lacking the Video Object Layer (VOL) and the upper layers.
@@ -458,7 +570,28 @@ func ExtractElementaryStream(input string, vOuput string) error{
 	return nil
 }
 
-func DashPackage(input string, output string, profile string)error{
+func DashPackage(input string, output string)error{
+	// -dash [DURATION]: enables MPEG-DASH segmentation, creating segments of the given duration (in milliseconds).
+	// We advise you to set the duration to 2 seconds for Live and short VOD files, and 5 seconds for long VOD videos.
+	// -rap -frag-rap: forces segments to begin with Random Access Points. Mandatory to have a working playback.
+	// –profile [PROFILE]: MPEG-DASH profile. Set it to 'onDemand' for VOD videos, and 'live' for live streams.
+	// -out [path/to/outpout.file]: output file location. This parameter is optional: by default, MP4box will create an
+	// output.mpd file and the corresponding output.mp4 files in the current directory.
+	// [path/to/input1.file]…: indicates where your input mp4 files are. They can be video or audio files.
+	// -segment-name name
+	// -moof-sn 2
+	// profile dashavc264:onDemand or dashavc264:live
+	cmd := fmt.Sprintln(config.MP4BOX + " -dash 3000 -rap -frag-rap  -profile dashavc264:onDemand -out " + output + " " + input)
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- dashed failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func SegmentDash(input string, output string)error{
 	// -dash [DURATION]: enables MPEG-DASH segmentation, creating segments of the given duration (in milliseconds).
 	// We advise you to set the duration to 2 seconds for Live and short VOD files, and 5 seconds for long VOD videos.
 	// -rap -frag-rap: forces segments to begin with Random Access Points. Mandatory to have a working playback.
@@ -467,7 +600,48 @@ func DashPackage(input string, output string, profile string)error{
 	// output.mpd file and the corresponding output.mp4 files in the current directory.
 	// [path/to/input1.file]…: indicates where your input mp4 files are. They can be video or audio files.
 
-	cmd := fmt.Sprintln(config.MP4BOX + " -dash 2000 -rap -frag-rap -profile onDemand -out " + output + " " + input)
+	// Create dash segments from input file (input file is the long video)
+	// Example: MP4Box -dash 10000 -frag 1000 -rap -segment-name myDash -subsegs-per-sidx 5 -url-template videos/TTH.mp4
+	// will create myDash1-myDash25 + myDashInit + TTH_dash.mpd
+	cmd := fmt.Sprintln(config.MP4BOX + " -dash 3000 " + " -segment-name " + output + " " + input)
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- dashed failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func DashPackageFFMPEG(input string, output string)error{
+	// -dash [DURATION]: enables MPEG-DASH segmentation, creating segments of the given duration (in milliseconds).
+	// We advise you to set the duration to 2 seconds for Live and short VOD files, and 5 seconds for long VOD videos.
+	// -rap -frag-rap: forces segments to begin with Random Access Points. Mandatory to have a working playback.
+	// –profile [PROFILE]: MPEG-DASH profile. Set it to 'onDemand' for VOD videos, and 'live' for live streams.
+	// -out [path/to/outpout.file]: output file location. This parameter is optional: by default, MP4box will create an
+	// output.mpd file and the corresponding output.mp4 files in the current directory.
+	// [path/to/input1.file]…: indicates where your input mp4 files are. They can be video or audio files.
+	cmd := fmt.Sprintln("ffmpeg -report -re -i "+ input + " -g 52 -acodec libvo_aacenc -ab 64k -vcodec libx264 -vb 448k -f mp4 -movflags frag_keyframe+empty_moov " + output)
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- dashed failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func DashPackageWithSequence(input string, output string, profile string, segmentId string)error{
+	// -dash [DURATION]: enables MPEG-DASH segmentation, creating segments of the given duration (in milliseconds).
+	// We advise you to set the duration to 2 seconds for Live and short VOD files, and 5 seconds for long VOD videos.
+	// -rap -frag-rap: forces segments to begin with Random Access Points. Mandatory to have a working playback.
+	// –profile [PROFILE]: MPEG-DASH profile. Set it to 'onDemand' for VOD videos, and 'live' for live streams.
+	// -out [path/to/outpout.file]: output file location. This parameter is optional: by default, MP4box will create an
+	// output.mpd file and the corresponding output.mp4 files in the current directory.
+	// [path/to/input1.file]…: indicates where your input mp4 files are. They can be video or audio files.
+	// -segment-name name
+	// -moof-sn 2
+	cmd := fmt.Sprintln(config.MP4BOX + " -dash 2000 -rap -frag-rap -moof-sn "+ segmentId + " -profile onDemand -out " + output + " " + input)
 	//log.Println(cmd)
 	err := exec.Command("bash", "-c", cmd).Run()
 	if err != nil {
@@ -480,11 +654,42 @@ func DashPackage(input string, output string, profile string)error{
 func RemoveMp4Moov(input string, output string) error {
 	//Remove the moov & ftyp atom from the mp4 file
 	//Limitation: only work with video frag file
-	cmd := fmt.Sprintln(config.MP4EDIT + " --remove moov --remove ftyp " + input + " " + output)
+	cmd := fmt.Sprintln(config.MP4EDIT + " --remove moov --remove ftyp --remove free --remove sidx " + input + " " + output)
 	//log.Println(cmd)
 	err := exec.Command("bash", "-c", cmd).Run()
 	if err != nil {
 		log.Println("-- atom edit failed, ", err)
+		return err
+	}
+	return nil
+}
+
+func MP4BoxConcat(dir string, outdir string, output string) error {
+	//Read the directory
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	//Create output folder
+	err = tools.CreateDir(outdir)
+	if err != nil {
+		return err
+	}
+
+	//Write the file names to the file
+	filenames := ""
+	for _, file := range files {
+		filenames = filenames + " -cat "+ dir + file.Name()
+	}
+
+	cmd := fmt.Sprintln(config.MP4BOX +  filenames + " " + outdir+ output)
+	//log.Println(cmd)
+
+	//log.Println(cmd)
+	err = exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- Cat failed, ", err.Error())
 		return err
 	}
 	return nil
