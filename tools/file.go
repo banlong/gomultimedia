@@ -9,6 +9,7 @@ import (
 	"time"
 "strings"
 	"strconv"
+	"bufio"
 )
 
 func SaveBinFile2Disk(srcFile []byte, destDir string, fileName string) error  {
@@ -230,4 +231,23 @@ func GetFileSize(filePath string) int64{
 		return 0
 	}
 	return stat.Size()
+}
+
+func GetBytes(filePath string) ([]byte, error) {
+	file, err := os.Open(filePath)
+	defer file.Close()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	fileInfo, _ := file.Stat()
+	var size int64 = fileInfo.Size()
+	bytes := make([]byte, size)
+
+	// read file into bytes
+	buffer := bufio.NewReader(file)
+	_, err = buffer.Read(bytes)
+
+	return bytes, nil
 }

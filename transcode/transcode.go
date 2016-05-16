@@ -45,7 +45,7 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 
 	//comment it out if you do not want to see the debug info
 	var debug string
-	debug = " -report "
+	//debug = " -report "
 
 	//-crf 22
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
@@ -97,7 +97,7 @@ func Split(input string, seconds int, outputDir string, videoId string, ext stri
 
 	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
 
-	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+	cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
 		" -f segment " + outputDir +  "%04d" + ext
 
 	/* -------------------------------------------------------------------------------------------------- */
@@ -488,7 +488,7 @@ func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//extractStart := time.Now()
 	//vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
 	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vcodec copy -an -bsf:v h264_mp4toannexb " + vOuput)
-	log.Println("vCmd:" , vCmd)
+	//log.Println("vCmd:" , vCmd)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
 	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
@@ -693,4 +693,168 @@ func MP4BoxConcat(dir string, outdir string, output string) error {
 		return err
 	}
 	return nil
+}
+
+func Aac2mp4(aac string, mp4 string)  error {
+	cmd := fmt.Sprintln(config.MP4BOX +  " -add " + aac + " " + mp4)
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- Cat failed, ", err.Error())
+		return err
+	}
+	return nil
+}
+
+func ProduceDashif(duration int, mpdDir string, mpdName string, videoFile string, audioFile string )error{
+	// STILL FOUND NO WAY TO PRODUCE DASH IF VIDEO FROM SEGMENTS, DASH IF FROM A MP4 IS OK
+	// Profiles:
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//---------------------AUDIO/VIDEO SEGS ARE SEPARATED----------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF
+//	cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+//	" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+//
+//	cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+//	" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//-----------------------AUDIO/VIDEO SEGS APPEND TO AUDIO/VIDEO INIT SEG------------------------------------------------------------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF nor  OSMO4
+	cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	" -mpd-refresh 3 -profile full -rap -single-file -segment-name v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+	" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	" -mpd-refresh 3 -profile full -rap -single-file -segment-name a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+	" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//segment name change to -segment-name qh_ : PLAY VIDEO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	//segment name change to -segment-name qh_ : PLAY AUDIO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmdV).Run()
+	err = exec.Command("bash", "-c", cmdA).Run()
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+func ProduceDash(duration int, mpdDir string, mpdName string, videoFile string, audioFile string)error{
+	// Profiles: h264:live & h264 play the video to the end
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//OPTION 1 - USING MUX SEGMENTS - MULTIPLEX OPTION I
+	// RESULT: Dash segment are separated in files, play to the end of file  GRADE:*****
+	//MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -mpd-refresh 3 -profile h264:live -rap -frag 1000 -segment-name seg_ "  + " -out " + mpdDir + mpdName  +
+	//" " + videoFile)
+
+
+	//OPTION 2 - USING MUX SEGMENTS - MULTIPLEX OPTION II
+	// RESULT: Dash segments are created separately in files
+	//<<<<<<<<<<<<<<<<<Current OPT on MediaCluster>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	//MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash 3000  -mpd-refresh 3 -profile dashavc264:live -rap "  +
+	//" -out " + mpdDir + mpdName  +  " -add " + videoFile  + "#video -add " + videoFile + "#audio -fps 30 seg" )
+
+	//OPTION 3 - USING MUX SEGMENTS - MULTIPLEX OPTION III (Different profile from II cause the segment to merge)
+	// RESULT: Dash segments are merged in the init segment, play better GRADE: *****
+	//MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash 3000  -mpd-refresh 3 -profile h264:live -rap "  +
+	//" -out " + mpdDir + mpdName  +  " -add " + videoFile  + "#video -add " + videoFile + "#audio -fps 30 seg" )
+
+	//OPTION 4 - USING NON-MUX SEGMENTS - MULTIPLEX OPTION IV
+	// audio & video can be seperate (aac is accepted)
+	// RESULT: Dash segments append into init segment - Seeker Support
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -mpd-refresh 3 -profile h264:live -rap "  + " -out " + mpdDir + mpdName  +
+	" -add " + videoFile  + "#video -add " + audioFile + "#audio kd2"   )
+
+
+
+
+
+	log.Println("Command :" , cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+func ProduceDashLive(duration int, mpdDir string, mpdName string, videoFile string, audioFile string)error{
+	// Profiles: h264:live & h264 play the video to the end
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	MP4BoxAudioMux(videoFile, audioFile)
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -mpd-refresh 3 -profile dashavc264:live -rap -frag 1000 -dynamic -single-file -segment-name seg_ "  + " -out " + mpdDir + mpdName  +
+	" " + videoFile)
+
+	log.Println("Command :" , cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+//Add audio track into video track
+func MP4BoxAudioMux(video string, audio string)error{
+	//Mux using MP4 Box, not working "cannot find H264 start code"
+	//cmd := fmt.Sprintln(config.MP4BOX + " -fps 23.976 -add " + video + " -add " + audio + " " + newfile)
+	cmd := fmt.Sprintln(config.MP4BOX+ " -add " + audio + " " + video)
+
+	//result: "noaudio.h264: Invalid data found when processing input"
+	//cmd := fmt.Sprintln(config.FFMPEG + " -framerate 25  -report  -i " + video + " -i " + audio +
+	//" -codec copy -y " + newfile)
+
+	log.Println(cmd)
+	errs := exec.Command("bash", "-c", cmd).Run()
+	if errs != nil {
+		log.Println("-- muxing was failed, ", errs)
+		return errs
+	} else {
+		//log.Println("-- muxing completed.")
+		return nil
+	}
+}
+
+func FfmpegMux(video string, audio string, out string)  {
+	cmd := fmt.Sprintln(config.FFMPEG+ " -i " + audio + " -i " + video + " -c copy -map 0:0 -map 1:1 -shortest " + out)
+
+	//cmd := fmt.Sprintln(config.FFMPEG+ " -i " + audio + " -i " + video + " -c copy -map 0:v:0 -map 1:a:0 -shortest " + out)
+
+	log.Println(cmd)
+	errs := exec.Command("bash", "-c", cmd).Run()
+	if errs != nil {
+		log.Println("-- muxing was failed, ", errs)
+		return errs
+	} else {
+		//log.Println("-- muxing completed.")
+		return nil
+	}
 }
