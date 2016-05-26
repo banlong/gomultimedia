@@ -45,11 +45,11 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 
 	//comment it out if you do not want to see the debug info
 	var debug string
-	debug = " -report "
+	//debug = " -report "
 
 	//-crf 22
 	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
-	//Cut2it define
+	//Cut2it define, using this, work properly
 	cmd := fmt.Sprintln(config.FFMPEG + " -i " + oldFile +
 	" -y -c:v libx264 -preset " + compressLevel + qStr + debug + " -threads 0 -c:a aac -strict -2 " + destDir + name)
 
@@ -62,16 +62,45 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 
 	//To force the frame rate of the output file to 24 fps:
 	//cmd := fmt.Sprintln("ffmpeg -i " + oldFile + " -r 24 " + newName)
+
+//	log.Println(qStr)
+//	cmd := fmt.Sprintln(config.FFMPEG + debug + " -i " + oldFile +
+//	" -c:a libfdk_aac -ac 2 -ab 128k -c:v libx264 -x264opts 'keyint=24:min-keyint=24:no-scenecut' -b:v 1500k -maxrate 1500k -bufsize 1000k -vf 'scale=-1:720' " + destDir + name)
 	/* -------------------------------------------------------------------------------------------------- */
 	log.Println("Command :" + cmd)
 	err := exec.Command("bash", "-c", cmd).Run()
 
 	if err != nil {
+		log.Println("Transcoding Err: " + err.Error())
 		return err
 	} else {
-		//log.Println("Transcoding Completed: " + oldFile)
+		log.Println("Transcoding Completed: " + oldFile)
 		return nil
 	}
+}
+
+func SplitVideo(input string, seconds string, outputDir string) (*list.List, error){
+	//MP4Box -split 3 videos/duck.mp4 -out factory/segments/%s.mp4
+	log.Println("-- Splitting video...", input)
+
+	//Make sure temp folder exist
+	err := tools.CreateDir(outputDir)
+	if(err != nil){
+		return list.New(), err
+	}
+
+	cmd := config.MP4BOX + " -split " + seconds + " " + input + " -out " + outputDir
+	log.Println("cmd:" ,cmd)
+	err = exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("--Split failure!", err.Error())
+		return list.New(), err
+	} else {
+		//log.Println("-- Split file completed")
+		names:= tools.GetFileNames(outputDir)
+		return names, nil
+	}
+
 }
 
 // SPLIT ONE MP4 INTO MULTIPLE MP4s WITH SAME LENGTH (SECONDS), n: seconds
@@ -97,8 +126,16 @@ func Split(input string, seconds int, outputDir string, videoId string, ext stri
 
 	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
 
-	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
-		" -f segment " + outputDir +  "%04d" + ext
+	//Using this, split without reencode
+	//cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+	//	" -f segment " + outputDir +  "%04d" + ext
+
+	//This split script produce the list.txt contains all the file name
+	//ffmpeg -i videos/asia-copy.mp4 -acodec copy -vcodec copy -segment_list list.txt -force_key_frames  expr:gte(t,n_forced*3) -segment_time 3 -f segment factory/segments/%04d.mp4
+
+	cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+	" -f segment -r 30 " + outputDir +  "%04d" + ext
+
 
 	/* -------------------------------------------------------------------------------------------------- */
 	log.Println("cmd:" ,cmd)
@@ -254,6 +291,40 @@ func GetAviDuration(file string) (string, error) {
 	}
 }
 
+func GetDurationInMillisecond(file string) (string) {
+	defaultTime := "3000"
+	cmd := fmt.Sprintln(config.FFPROBE + " -v error -loglevel quiet -show_entries format=duration" +
+	" -of default=noprint_wrappers=1:nokey=1 -sexagesimal " + file)
+
+	out, err := exec.Command("bash", "-c", cmd).CombinedOutput()
+
+	if err != nil {
+		log.Println(err.Error())
+		return defaultTime
+	}
+
+	duration := string(out)   //hh:mm:ss.mmmm
+	durs := strings.Split(duration, ".")
+	timepot := strings.Split(durs[0], ":")
+
+	//invalid data
+	if(len(timepot)<3){
+		log.Println("len:", len(timepot))
+		return defaultTime
+	}
+
+	hh := timepot[0]
+	mm := timepot[1]
+	ss := timepot[2]
+
+	hv, _ := strconv.Atoi(hh)
+	mv, _ := strconv.Atoi(mm)
+	sv, _ := strconv.Atoi(ss)
+
+	val := (hv*3600 + mv*60 + sv)*1000
+	retval := strconv.Itoa(val)
+	return retval
+}
 
 func SplitAvi(input string, seconds int, outputDir string, name string, ext string, debug bool)  (*list.List, error){
 	//This slower than transcode & split
@@ -488,10 +559,12 @@ func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//extractStart := time.Now()
 	//vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -an -y " + vOuput)
 	vCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vcodec copy -an -bsf:v h264_mp4toannexb " + vOuput)
-	log.Println("vCmd:" , vCmd)
+	//log.Println("vCmd:" , vCmd)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
-	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
+	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
+	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -c:a aac -b:a 128k " + aOutput)
+
 	log.Println("aCmd:" , aCmd)
 	err := exec.Command("bash", "-c", vCmd).Run()
 	if err != nil {
@@ -693,4 +766,361 @@ func MP4BoxConcat(dir string, outdir string, output string) error {
 		return err
 	}
 	return nil
+}
+
+func Aac2mp4(aac string, mp4 string)  error {
+	cmd := fmt.Sprintln(config.MP4BOX +  " -add " + aac + " " + mp4)
+	log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("-- Cat failed, ", err.Error())
+		return err
+	}
+	return nil
+}
+
+// DASH-IF FROM VIDEO & AUDIO SEG - VOD
+func ProduceDashif(duration string, mpdDir string, mpdName string, videoFile string, audioFile string )error{
+	// STILL FOUND NO WAY TO PRODUCE DASH IF VIDEO FROM SEGMENTS, DASH IF FROM A MP4 IS OK
+	// Profiles:
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//---------------------AUDIO/VIDEO SEGS ARE SEPARATED----------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF
+//	cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+//	" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+//
+//	cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+//	" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//-----------------------AUDIO/VIDEO SEGS APPEND TO AUDIO/VIDEO INIT SEG------------------------------------------------------------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF nor  OSMO4
+	//cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//" -mpd-refresh 3 -profile full -rap -single-file -segment-name v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	//cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//" -mpd-refresh 3 -profile full -rap -single-file -segment-name a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//segment name change to -segment-name qh_ : PLAY VIDEO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	//segment name change to -segment-name qh_ : PLAY AUDIO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+
+	//NON MULTIPLEX VIDEO, CAN PLAY BOTH OSMO4 & JW PLAYER. BUT NOT STILL THE END OF THE VIDEO
+	MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -dash-profile dashavc264:live -bs-switching no -rap -frag 3000 " + videoFile  + "#video "+
+	//videoFile + "#audio -out " + mpdDir + mpdName)
+
+
+	//Produce a list of URL instead of the URL template
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + duration +
+	" -segment-timeline -profile live -bs-switching no -rap -frag " + duration + " " + videoFile  + "#video "+
+	videoFile + "#audio -out " + mpdDir + mpdName)
+
+	//minimumUpdatePeriod="PT0H0M2.000S"
+	log.Println("cmd: ", cmd)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+// DASH-IF FROM MUX VIDEOSEG - VOD
+func ProduceDashifFromMuxSeg(duration int, mpdDir string, mpdName string, videoFile string)error{
+	//NON MULTIPLEX VIDEO, CAN PLAY BOTH OSMO4 & JW PLAYER STILL THE END OF THE VIDEO
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -profile live -bs-switching no "  + " " + videoFile  + "#video " + videoFile + "#audio -out " + mpdDir + mpdName)
+
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+// MULTIPLEX DASH FROM MUX SEGEMENT - VOD
+func ProduceDash(duration int, mpdDir string, mpdName string, videoFile string, audioFile string, segmentName string)error{
+	// Profiles: h264:live & h264 play the video to the end
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//OPTION 1 - USING MUX SEGMENTS - MULTIPLEX OPTION I
+	// RESULT: Dash segment are separated in files, play to the end of file  GRADE:*****
+	MP4BoxAudioMux(videoFile, audioFile)
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + segmentName + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -mpd-refresh 3 -profile h264:live -rap -frag 3000 -segment-name "+ segmentName  + " -out " + mpdDir + mpdName  +
+	" " + videoFile)
+
+
+	//OPTION 2 - USING MUX SEGMENTS - MULTIPLEX OPTION II
+	// RESULT: Dash segments are created separately in files, NOT PLAY TO END
+	//<<<<<<<<<<<<<<<<<Current OPT on MediaCluster>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+	//MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash 3000  -mpd-refresh 3 -profile dashavc264:live -rap "  +
+	//" -out " + mpdDir + mpdName  +  " -add " + videoFile  + "#video -add " + videoFile + "#audio -fps 30 seg" )
+
+	//OPTION 3 - USING MUX SEGMENTS - MULTIPLEX OPTION III (Different profile from II cause the segment to merge)
+	// RESULT: Dash segments are merged in the init segment, play better GRADE: *****
+	//MP4BoxAudioMux(videoFile, audioFile)
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash 3000  -mpd-refresh 3 -profile h264:live -rap "  +
+	//" -out " + mpdDir + mpdName  +  " -add " + videoFile  + "#video -add " + videoFile + "#audio -fps 30 seg" )
+
+	//OPTION 4 - USING NON-MUX SEGMENTS - MULTIPLEX OPTION IV
+	// audio & video can be seperate (aac is accepted)
+	// RESULT: Dash segments append into init segment - Seeker Support
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -mpd-refresh 3 -profile h264:live -rap "  + " -out " + mpdDir + mpdName  +
+	//" -add " + videoFile  + "#video -add " + audioFile + "#audio kd2"   )
+
+	log.Println("Command :" , cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+// DASH-IF FROM VIDEO & AUDIO SEG - LIVE
+func ProduceDashifLive(duration int, mpdDir string, mpdName string, videoFile string, audioFile string )error{
+	// STILL FOUND NO WAY TO PRODUCE DASH IF VIDEO FROM SEGMENTS, DASH IF FROM A MP4 IS OK
+	// Profiles:
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//---------------------AUDIO/VIDEO SEGS ARE SEPARATED----------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF
+	//	cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+	//	" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+	//
+	//	cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//	" -mpd-refresh 3 -profile h264:live -rap -segment-ext mp4 -segment-name " + "a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+	//	" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//-----------------------AUDIO/VIDEO SEGS APPEND TO AUDIO/VIDEO INIT SEG------------------------------------------------------------------------------------------
+	//Using profile main, URL in MPD is different from below - THIS APP DOES NOT PLAY ON DASH-IF nor  OSMO4
+	//cmdV := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//" -mpd-refresh 3 -profile full -rap -single-file -segment-name v_" + " -dash-ctx " + mpdDir + "v-stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	//cmdA := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	//" -mpd-refresh 3 -profile full -rap -single-file -segment-name a_" + " -dash-ctx " + mpdDir + "a-stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+	//-----------------------------------------------------------------------------------------------------------------
+
+	//segment name change to -segment-name qh_ : PLAY VIDEO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + audioFile  + " " + videoFile)
+
+	//segment name change to -segment-name qh_ : PLAY AUDIO ONLY, need to make the audio and video segment has different name
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash " + strconv.Itoa(3000) +
+	// " -mpd-refresh 3 -profile live -rap -segment-name qh_ -dash-ctx " + mpdDir + "stream.txt"  +
+	//" -out " + mpdDir + mpdName  +  " " + videoFile  + " " + audioFile)
+
+	//NON MULTIPLEX VIDEO, CAN PLAY BOTH OSMO4 & JW PLAYER STILL THE END OF THE VIDEO
+	MP4BoxAudioMux(videoFile, audioFile)
+
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -dash-profile dashavc264:live -bs-switching no "  + " " + videoFile  + "#video " + videoFile + "#audio -out " + mpdDir + mpdName)
+
+	//USING THIS IN CASE ALL SEGMENTS HAVE SAME DURATION, ALL SEGMENTS KEPT
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -dash-profile dashavc264:live -dynamic -time-shift -1 -fps 34 -mpd-refresh 5 -min-buffer 10000 -bs-switching inband  -rap -frag 3000 " +
+	//videoFile  + "#video "+	videoFile + "#audio -out " + mpdDir + mpdName)
+
+	//USING THIS SEGMENT TIMELINE FOR DEVIATION SEGMENTS, ALL SEGMENTS KEPT
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -dash-profile dashavc264:live -dynamic -time-shift -1 -segment-timeline -fps 34 -mpd-refresh 1 -min-buffer 10000 -bs-switching inband  -rap -frag 3000 " +
+	videoFile  + "#video "+	videoFile + "#audio -out " + mpdDir + mpdName)
+
+	//USING THIS IN CASE WANT TO HAVE SEGMENTS REPLACED
+	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	//" -dash-profile dashavc264:live -dynamic -fps 34 -mpd-refresh 1 -min-buffer 10000 -bs-switching inband  -rap -frag 3000 " +
+	//videoFile  + "#video "+	videoFile + "#audio -out " + mpdDir + mpdName)
+
+	log.Println("cmd: ", cmd)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+// MULTIPLEX DASH - LIVE
+func ProduceDashLive(duration int, mpdDir string, mpdName string, videoFile string, audioFile string)error{
+	// Profiles: h264:live & h264 play the video to the end
+	// onDemand, main, simple, full, dashavc264:onDemand --> append all segments into init segment, seeker work
+	// live , dashavc264:live--> create ms4 segments
+
+	//previous segments are removed when new segment come
+	MP4BoxAudioMux(videoFile, audioFile)
+	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+	" -dash-profile dashavc264:live -dynamic -time-shift -1 -fps 34 -mpd-refresh 1 -min-buffer 1000 -bs-switching inband -rap -frag " +
+	strconv.Itoa(duration) + " -segment-name seg_ "  + " -out " + mpdDir + mpdName  +	" " + videoFile)
+
+	//** -min-buffer durInMilSecs --> min buffer player need to fill before it can play. If data come fast, set this number
+	//   smaller will let the player more responsive
+
+	//New segment is appended to the init segment when it comes, cannot be done bc the init segment is opening by the player
+//	MP4BoxAudioMux(videoFile, audioFile)
+//	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
+//	" -mpd-refresh 3 -profile h264:live -rap -frag 1000 -dynamic -single-file -segment-name seg_ "  + " -out " + mpdDir + mpdName  +
+//	" " + videoFile)
+	log.Println("Command :" , cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+
+	if err != nil {
+		log.Println("Dash Err, " , err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+//Add audio track into video track
+func MP4BoxAudioMux(video string, audio string)error{
+	//Mux using MP4 Box, not working "cannot find H264 start code"
+	//cmd := fmt.Sprintln(config.MP4BOX + " -fps 23.976 -add " + video + " -add " + audio + " " + newfile)
+	cmd := fmt.Sprintln(config.MP4BOX+ " -add " + audio + " " + video)
+
+	//result: "noaudio.h264: Invalid data found when processing input"
+	//cmd := fmt.Sprintln(config.FFMPEG + " -framerate 25  -report  -i " + video + " -i " + audio +
+	//" -codec copy -y " + newfile)
+
+	log.Println(cmd)
+	errs := exec.Command("bash", "-c", cmd).Run()
+	if errs != nil {
+		log.Println("-- muxing was failed, ", errs)
+		return errs
+	} else {
+		//log.Println("-- muxing completed.")
+		return nil
+	}
+}
+
+// CONVERT AAC TO M4A
+func ConvertAAC2M4A(aac string, m4a string) error {
+	//ffmpeg -i muxtest/live/8.aac -c:a aac -b:a 128k muxtest/live/8.m4a
+	cmd := fmt.Sprintln(config.FFMPEG + " -i " + aac + " -c:a aac -strict -2 -b:a 128k -y " + m4a)
+	log.Println(cmd)
+	errs := exec.Command("bash", "-c", cmd).Run()
+	if errs != nil {
+		log.Println("-- convert aac failed, ", errs)
+		return errs
+	} else {
+		//log.Println("-- muxing completed.")
+		return nil
+	}
+
+}
+
+
+/*
+usage: mp4fragment [options] <input> <output>
+options are:
+  --verbosity <n> sets the verbosity (details) level to <n> (between 0 and 3)
+  --debug enable debugging information output
+  --quiet don't print out notice messages
+  --fragment-duration <milliseconds> (default = automatic)
+  --timescale <n> (use 10000000 for Smooth Streaming compatibility)
+  --track <track-id or type> only include media from one track (pass a track ID, 'audio', 'video' or 'subtitles')
+  --index (re)create the segment index
+  --trim trim excess media in longer tracks
+  --no-tfdt don't add 'tfdt' boxes in the fragments (may be needed for legacy Smooth Streaming clients)
+  --force-i-frame-sync <auto|all> treat all I-frames as sync samples (for open-gop sequences)
+    'auto' only forces the flag if an open-gop source is detected, 'all' forces the flag in all cases
+*/
+func BentoFrag(input string, output string) error{
+	cmd := fmt.Sprintln(config.BENTOFRAG + " " + input + " " + output)
+	log.Println("cmd: ", cmd)
+	//log.Println(cmd)
+	err := exec.Command("bash", "-c", cmd).Run()
+	if err != nil {
+		log.Println("Dash Err, ", err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+func BentoDashIf(input BentoParam)error  {
+	cmdStr := config.BENTODASH
+	cmdStr += " " + input.InputVideo																	//input file
+
+	if(input.MpdName != "") {cmdStr += " --mpd-name=" + input.MpdName}									//mpd file name
+	if(input.Profile != "") {cmdStr += " --profile=" + input.Profile}   								//live, on-demand, hbbtv-1.5
+	if(input.InitSegName != "") {cmdStr += " --init-segment=" + input.InitSegName		}				//init segment name
+	if(input.MinBuffDuration != "") {cmdStr += " --min-buffer-time=" + input.MinBuffDuration}			//Minimum buffer time (in seconds)
+	if(input.SmoothMpdName != "") {cmdStr += " --smooth-client-manifest-name=" + input.SmoothMpdName}	//Smooth Streaming Client Manifest file name
+	if(input.NoMedia) {cmdStr += " --no-media"}															//no generate media files
+	if(input.NoSplit) {cmdStr += " --no-split"}															//do not split into segment
+	if(input.UseSegmentList) {cmdStr += " --use-segment-list"}											//Use segment lists instead of segment templates
+	if(input.SmoothCompatible) {cmdStr += " --smooth"}													//Produce an output compatible with Smooth Streaming
+	if(input.UseSegmentTimeLine) {cmdStr += " --use-segment-timeline"}									//Use segment timelines (necessary if segment durations	vary)
+	if(input.Debug) {cmdStr += " --debug"}																//Use segment timelines (necessary if segment durations	vary)
+	if(input.UseExistingDir) {cmdStr += " --force"}														//Allow output to an existing directory
+	cmdStr += " --output-dir " + input.OutputDir																	//output directory
+
+	log.Println("cmd:", cmdStr)
+	err := exec.Command("bash", "-c", cmdStr).Run()
+	if err != nil {
+		log.Println("Dash Err, ", err)
+		return err
+	} else {
+		return nil
+	}
+}
+
+type BentoParam struct {
+	InputVideo			string
+	OutputDir 			string
+	OutputVideo			string
+	Profile 			string
+	MpdName 			string
+	InitSegName 		string
+	MinBuffDuration 	string
+	SmoothMpdName 		string
+	FramentDuration		string
+	TimeScale			string
+	TrackID				string
+	NoMedia 			bool
+	NoSplit 			bool
+	UseSegmentList 		bool
+	UseSegmentTimeLine 	bool
+	SmoothCompatible 	bool
+	Debug 				bool
+	UseExistingDir  	bool
+	IsQuiet             bool
+	RecreateIndex		bool
+	Trim 				bool
+	Notfdt				bool
+	ForceIframeSync		bool
 }

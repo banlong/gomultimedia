@@ -9,6 +9,7 @@ import (
 	"time"
 "strings"
 	"strconv"
+	"bufio"
 )
 
 func SaveBinFile2Disk(srcFile []byte, destDir string, fileName string) error  {
@@ -167,9 +168,11 @@ func Rename(oldFile string, newFile string) error{
 	return nil
 }
 
+
 func DurationToSeconds(duration string) string {
+	inputs := strings.Split(duration, ".")
 	//input must be hh:mm:ss
-	timepot := strings.Split(duration, ":")
+	timepot := strings.Split(inputs[0], ":")
 	if(len(timepot)<3){
 		log.Println("len:", len(timepot))
 		return ""
@@ -179,13 +182,17 @@ func DurationToSeconds(duration string) string {
 	mm := timepot[1]
 	ss := timepot[2]
 
-	//	log.Println("hh:", hh)
-	//	log.Println("mm:", mm)
-	//	log.Println("ss:", ss)
+		log.Println("hh:", hh)
+		log.Println("mm:", mm)
+		log.Println("ss:", ss)
 
 	hv, _ := strconv.Atoi(hh)
 	mv, _ := strconv.Atoi(mm)
 	sv, _ := strconv.Atoi(ss)
+
+	log.Printf("hv: %d \n", hv)
+	log.Printf("hv: %d \n", mv)
+	log.Printf("hv: %d \n", sv)
 
 	val := hv*3600 + mv*60 + sv
 	retval := strconv.Itoa(val)
@@ -230,4 +237,23 @@ func GetFileSize(filePath string) int64{
 		return 0
 	}
 	return stat.Size()
+}
+
+func GetBytes(filePath string) ([]byte, error) {
+	file, err := os.Open(filePath)
+	defer file.Close()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	fileInfo, _ := file.Stat()
+	var size int64 = fileInfo.Size()
+	bytes := make([]byte, size)
+
+	// read file into bytes
+	buffer := bufio.NewReader(file)
+	_, err = buffer.Read(bytes)
+
+	return bytes, nil
 }

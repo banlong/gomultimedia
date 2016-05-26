@@ -12,7 +12,8 @@ const (
 	FFPROB_LC   string = "ffprobe"
 	MP4BOX  	string = "MP4Box"
 	MP4EDIT  	string = "mp4edit"
-
+	BENTOFRAG   string = "mp4fragment"
+	BENTODASH	string = "mp4dash"
 	ROOT_DIR	string = "tmp/transcode-buffer/"
 	STREAM_PUBLIC_URL	string	= "http://beta.cut2it.com"
 	STREAM_LOCAL_URL	string = "http://localhost:9099"
