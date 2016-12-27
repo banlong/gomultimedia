@@ -143,9 +143,9 @@ func CreateDir(dir string) error{
 			log.Println(" -- error creating " +  dir)
 			return err
 		}
-		log.Printf("-- created directory %s \n", dir)
+		//log.Printf("-- created directory %s \n", dir)
 	}else{
-		log.Printf("-- %s is ready\n", dir)
+		//log.Printf("-- %s is ready\n", dir)
 	}
 	return nil
 }
@@ -256,4 +256,22 @@ func GetBytes(filePath string) ([]byte, error) {
 	_, err = buffer.Read(bytes)
 
 	return bytes, nil
+}
+
+func ParseList(listFile string) *list.List {
+	inFile, _ := os.Open(listFile)
+	defer inFile.Close()
+	scanner := bufio.NewScanner(inFile)
+	scanner.Split(bufio.ScanLines)
+	ret := list.New()
+	for scanner.Scan() {
+		name := scanner.Text()
+		if name != "" {
+			keys := strings.Split(name, ".")
+			key := keys[0] + ".mp4"
+			ret.PushBack(key)
+		}
+	}
+	return ret
+
 }

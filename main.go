@@ -22,21 +22,155 @@ func main(){
 	//LIVE
 	//ProduceDashIfLive()
 
-	//ffmpeg.SplitVideo("videos/duck.mp4", "3", "factory/segments/")
+	//TEST EXTRACT & MUX FOR MOBILE
+	//outputDir := "mobi/out/"
+	//video := outputDir + "video.mp4"
+	//audio := outputDir+ "audio.aac"
+	//tools.CreateDir(outputDir)
+	//ffmpeg.ExtractAV("mobi/1.mp4", video, audio )
+	//ffmpeg.MP4BoxAudioMux(video, audio)
 
-	//Dash Using Bento
-	pam := ffmpeg.BentoParam{
-		InputVideo: 		"videos/asia-fragmented.mp4",
-		OutputDir:			"factory/mpd/",
-		Profile:			"live",
-		UseSegmentTimeLine:	true,
-		Debug:				false,
-		NoSplit: 			false,
-		UseExistingDir:     true,
-	}
-	ffmpeg.BentoDashIf(pam)
+
+	ProduceDashAdaptiveFromDir()
 }
 
+func ProduceDashAdaptiveFromDir()  error{
+	processStart := time.Now()
+	tempDir := "adaptive/"
+	videoDir := tempDir +"mp4/"
+	hqDir := videoDir + "hq/"
+	mqDir := videoDir + "mq/"
+	lqDir := videoDir + "lq/"
+	audioDir := tempDir + "segments/"
+	dashDir := tempDir + "dash/"
+	mpdDir := dashDir + "mpd/"
+	inputDir1 :=  dashDir + "input1/"
+	inputDir2 :=  dashDir + "input2/"
+	inputDir3 :=  dashDir + "input3/"
+
+	tools.CreateDir(dashDir)
+	tools.CreateDir(mpdDir)
+	tools.CreateDir(inputDir1)
+	tools.CreateDir(inputDir2)
+	tools.CreateDir(inputDir3)
+	names := tools.GetFileNames(mqDir)
+
+	videoInput1 := inputDir1 + "video1.mp4"
+	videoInput2 := inputDir2 + "video2.mp4"
+	videoInput3 := inputDir3 + "video3.mp4"
+	audioInput := inputDir1 + "audio.aac"
+
+	nameElement := names.Front()
+	for (nameElement != nil){
+		videoTrack1 := mqDir + nameElement.Value.(string)
+		videoTrack2 := hqDir + nameElement.Value.(string)
+		videoTrack3 := lqDir + nameElement.Value.(string)
+
+		baseName := path.Base(videoTrack1)
+		parts := strings.Split(baseName, ".")
+		name := parts[0]
+		audioTrack := audioDir + name + ".aac"
+
+		//copy video file to an input folder
+		video1, _ := tools.GetBytes(videoTrack1)
+		tools.SaveBinFile2Disk(video1, inputDir1, "video1.mp4")
+		video2, _ := tools.GetBytes(videoTrack2)
+		tools.SaveBinFile2Disk(video2, inputDir2, "video2.mp4")
+		video3, _ := tools.GetBytes(videoTrack3)
+		tools.SaveBinFile2Disk(video3, inputDir3, "video3.mp4")
+		audio, _ := tools.GetBytes(audioTrack)
+		tools.SaveBinFile2Disk(audio, inputDir1, "audio.aac")
+
+		//Mux video
+		ffmpeg.MP4BoxAudioMux(videoInput1, audioTrack)
+
+		input:= ffmpeg.MP4BoxParameter{
+			Video_Track1: 		videoInput1,
+			Video_Track2: 		videoInput2,
+			Video_Track3: 		videoInput3,
+			Audio_Track: 		audioInput,
+			DashDuration:		"3000",
+			MpdDirectory:   	mpdDir,
+			MpdName: 			"bug.mpd",
+			UseSegmentTimeline:	true,
+			DashCTX: 			true,
+			Profile:			"live",
+			FragDuration:		"3000",
+			RandomAccess: 		true,
+			BitstreamSwitch: 	"merge",
+		}
+		ffmpeg.CreateDashifFromMuxSeg(input)
+
+
+		nameElement = nameElement.Next()
+	}
+
+	processTime := time.Since(processStart)
+	log.Println("PROCESSING TIME - ", processTime)
+
+
+
+	return nil
+}
+
+
+//Test Bug: dash cannot play on chrome, error decoding
+//This module test to find the cause of the above issue
+func DashProduceFromDir()  error{
+	processStart := time.Now()
+	tempDir := "bug/"
+	videoDir := tempDir +"video/"
+	audioDir := tempDir + "audio/"
+	mpdDir := tempDir + "mpd/"
+	inputDir :=  tempDir + "input/"
+
+	tools.CreateDir(mpdDir)
+	tools.CreateDir(inputDir)
+	names := tools.GetFileNames(videoDir)
+
+	videoInput := inputDir + "seg.mp4"
+	nameElement := names.Front()
+	for (nameElement != nil){
+		videoTrack := videoDir + nameElement.Value.(string)
+		ffmpeg.Transcode(videoTrack, inputDir,  "seg.mp4", "ultrafast", "mq")
+
+		baseName := path.Base(videoTrack)
+		parts := strings.Split(baseName, ".")
+		name := parts[0]
+		audioTrack := audioDir + name + ".aac"
+
+		//copy video file to an input folder
+		//video, _ := tools.GetBytes(videoTrack)
+		//tools.SaveBinFile2Disk(video, inputDir, "seg.mp4")
+		//videoInput := inputDir + "seg.mp4"
+
+		//Mux video
+		ffmpeg.MP4BoxAudioMux(videoInput, audioTrack)
+
+		input:= ffmpeg.MP4BoxParameter{
+			Video_Track1: 		videoInput,
+			DashDuration:		"3000",
+			MpdDirectory:   	mpdDir,
+			MpdName: 			"bug.mpd",
+			UseSegmentTimeline:	true,
+			DashCTX: 			true,
+			Profile:			"live",
+			FragDuration:		"3000",
+			RandomAccess: 		true,
+		}
+
+		ffmpeg.CreateDashifFromMuxSeg(input)
+
+		nameElement = nameElement.Next()
+	}
+
+	processTime := time.Since(processStart)
+	log.Println("PROCESSING TIME - ", processTime)
+
+
+
+	return nil
+}
 
 //THE DASH-IF MODULE CANNOT BE PLAYED TO THE END (LOST ABOUT 10%) VIDEO
 func ProduceDashIfFromSplitSeg() error{
@@ -51,13 +185,24 @@ func ProduceDashIfFromSplitSeg() error{
 	segDir := tempDir + "segments/"
 	mpdDir := tempDir + "mpd/"
 	inputDir :=  tempDir + "input/"
-	duration := 3
+	duration := "3"
 
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, _ := ffmpeg.Split(srcFile, duration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	duration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"",
+		OutputLocation: 	tempDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		tempDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, _ := fObj.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -77,7 +222,20 @@ func ProduceDashIfFromSplitSeg() error{
 
 		tools.SaveBinFile2Disk(video, inputDir, "seg.mp4")
 		videoInput := inputDir + "seg.mp4"
-		ffmpeg.ProduceDashifFromMuxSeg(3000, mpdDir, "kd2.mpd",  videoInput)
+
+		input:= ffmpeg.MP4BoxParameter{
+			Video_Track1: 		videoInput,
+			DashDuration:		"3000",
+			MpdDirectory:   	mpdDir,
+			MpdName: 			"bug.mpd",
+			UseSegmentTimeline:	true,
+			DashCTX: 			true,
+			Profile:			"live",
+			FragDuration:		"3000",
+			RandomAccess: 		true,
+		}
+
+		ffmpeg.CreateDashifFromMuxSeg(input)
 		nameElement = nameElement.Next()
 	}
 
@@ -90,6 +248,7 @@ func ProduceDashIfFromSplitSeg() error{
 
 	return nil
 }
+
 func ProduceDashIfFromEncodedSeg3() error{
 	//Play on DASH IF
 	//This module produce DASH resource that be played on DASH IF player
@@ -107,13 +266,24 @@ func ProduceDashIfFromEncodedSeg3() error{
 	mpdDir := tempDir + "mpd/"
 	inputDir :=  tempDir + "input/"
 	audioExt := ".aac"
-	duration := 10
+	duration := "10"
 
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, err := ffmpeg.Split(srcFile, duration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	duration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"sample",
+		OutputLocation: 	segDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		segDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, err := fObj.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -164,6 +334,7 @@ func ProduceDashIfFromEncodedSeg3() error{
 
 	return nil
 }
+
 func ProduceDashIfFromEncodedSeg2() error{
 	//Play on DASH IF
 	//This module produce DASH resource that be played on DASH IF player
@@ -181,13 +352,24 @@ func ProduceDashIfFromEncodedSeg2() error{
 	mpdDir := tempDir + "mpd/"
 	inputDir :=  tempDir + "input/"
 	audioExt := ".aac"
-	duration := 3
+	duration := "3"
 
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, err := ffmpeg.Split(srcFile, duration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	duration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"",
+		OutputLocation: 	segDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		segDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, err := fObj.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 
@@ -242,6 +424,7 @@ func ProduceDashIfFromEncodedSeg2() error{
 
 	return nil
 }
+
 func ProduceDashIfFromEncodedSeg() error{
 	//Play on DASH IF
 	//This module produce DASH resource that be played on DASH IF player
@@ -250,7 +433,7 @@ func ProduceDashIfFromEncodedSeg() error{
 
 	processStart := time.Now()
 
-	srcFile := "videos/talk.mp4"
+	srcFile := "videos/hy.mp4"
 	tempDir := "factory/"
 	segDir := tempDir + "segments/"
 	videoDir := tempDir + "video/"
@@ -259,13 +442,23 @@ func ProduceDashIfFromEncodedSeg() error{
 	mpdDir := tempDir + "mpd/"
 	inputDir :=  tempDir + "input/"
 	audioExt := ".aac"
-	splitDuration := 3
-	dashDuration :="3000"
+	splitDuration := "3"
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, _ := ffmpeg.Split(srcFile, splitDuration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	splitDuration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"",
+		OutputLocation: 	segDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		segDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, _ := fObj.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -307,7 +500,25 @@ func ProduceDashIfFromEncodedSeg() error{
 		//m4aAudioInput := inputDir + "seg.m4a"
 		//ffmpeg.ConvertAAC2M4A(audioInput, m4aAudioInput)
 		//duration := ffmpeg.GetDurationInMillisecond(videoInput)
-		ffmpeg.ProduceDashif(dashDuration, mpdDir, "kd2.mpd",  videoInput, audioInput)
+		//ffmpeg.ProduceDashif(dashDuration, mpdDir, "kd2.mpd",  videoInput, audioInput)
+
+		//Mux
+		ffmpeg.MP4BoxAudioMux(videoInput, audioInput)
+
+		//Dash
+		input:= ffmpeg.MP4BoxParameter{
+			Video_Track1: 		videoInput,
+			DashDuration:		"3000",
+			MpdDirectory:   	mpdDir,
+			MpdName: 			"bug.mpd",
+			UseSegmentTimeline:	true,
+			DashCTX: 			true,
+			Profile:			"live",
+			FragDuration:		"3000",
+			RandomAccess: 		true,
+		}
+
+		ffmpeg.CreateDashifFromMuxSeg(input)
 
 
 		nameElement = nameElement.Next()
@@ -340,13 +551,25 @@ func ProduceDashIfLive() error{
 	mpdDir := tempDir + "mpdlive/"
 	inputDir :=  tempDir + "input/"
 	audioExt := ".aac"
-	duration := 3
+	duration := "3"
 
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, err := ffmpeg.Split(srcFile, duration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	duration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"",
+		OutputLocation: 	segDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		segDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, err := fObj.Split(sPam)
+
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -420,13 +643,24 @@ func ProduceDash() error{
 	encodeDir := tempDir + "encode/"
 	mpdDir := tempDir + "mpd/"
 	audioExt := ".aac"
-	duration := 3
+	duration := "3"
 
 
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	names, err := ffmpeg.Split(srcFile, duration , segDir, "", ".mp4")
+	sPam := ffmpeg.FfmpegParam{
+		InputVideo: 		srcFile,
+		SegmentDuration: 	duration,
+		SegmentExt: 		".mp4",
+		SegmentName: 		"",
+		OutputLocation: 	segDir,
+		FrameRate: 			"30",
+		Debug: 				false,
+		SegmentList: 		segDir + "list.txt",
+	}
+	fObj := ffmpeg.NewFfmpeg()
+	names, err := fObj.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -494,4 +728,35 @@ func ProduceDash() error{
 	log.Println("Encode Time: ", encodeTime)
 
 	return nil
+}
+
+//SPLIT WITH NEW FEATURE
+func TestNewSplit()  {
+		sPam := ffmpeg.FfmpegParam{
+			InputVideo: "videos/trutinh.mp4",
+			SegmentDuration: "3",
+			SegmentExt: ".mp4",
+			SegmentName: "",
+			OutputLocation: "factory/trutinh/",
+			FrameRate: "30",
+			Debug: false,
+			SegmentList:"factory/trutinh/list.txt",
+		}
+		fObj := ffmpeg.NewFfmpeg()
+
+		fObj.Split(sPam)
+}
+
+func TestBentoDash()  {
+	//Dash Using Bento
+		pam := ffmpeg.BentoParam{
+			InputVideo: 		"videos/asia-fragmented.mp4",
+			OutputDir:			"factory/mpd/",
+			Profile:			"live",
+			UseSegmentTimeLine:	true,
+			Debug:				false,
+			NoSplit: 			false,
+			UseExistingDir:     true,
+		}
+		ffmpeg.BentoDashIf(pam)
 }

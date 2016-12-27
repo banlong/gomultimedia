@@ -150,6 +150,7 @@ func Split(input string, seconds int, outputDir string, videoId string, ext stri
 	}
 }
 
+
 // MERGE MP4s FILES INTO ONE MP4
 func Merge(namesFile string, outputFolder string, outputFile string) error{
 	log.Println("-- merging segment started")
@@ -562,8 +563,11 @@ func ExtractAV(input string, vOuput string, aOutput string)  error{
 	//log.Println("vCmd:" , vCmd)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c:v copy -vn -y " + aOutput)
 	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -c copy -map 0:a:0 -y " + aOutput)
-	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
-	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -c:a aac -b:a 128k " + aOutput)
+
+	aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -acodec copy -bsf:a aac_adtstoasc " + aOutput)
+
+	//For DTS Audio
+	//aCmd := fmt.Sprintln(config.FFMPEG + " -i " + input + " -vn -c:a aac -b:a 128k " + aOutput)
 
 	log.Println("aCmd:" , aCmd)
 	err := exec.Command("bash", "-c", vCmd).Run()
@@ -628,6 +632,7 @@ func MP4BoxMux(video string, audio string, newfile string)error{
 		return nil
 	}
 }
+
 
 func ExtractElementaryStream(input string, vOuput string) error{
 	//Extract the raw video codec data as it is.
@@ -955,7 +960,7 @@ func ProduceDashifLive(duration int, mpdDir string, mpdName string, videoFile st
 
 	//USING THIS SEGMENT TIMELINE FOR DEVIATION SEGMENTS, ALL SEGMENTS KEPT
 	cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
-	" -dash-profile dashavc264:live -dynamic -time-shift -1 -segment-timeline -fps 34 -mpd-refresh 1 -min-buffer 10000 -bs-switching inband  -rap -frag 3000 " +
+	" -dash-profile dashavc264:live -dynamic -time-shift -1 -fps 34 -mpd-refresh 5 -min-buffer 3000 -bs-switching inband  -rap -frag 3000 " +
 	videoFile  + "#video "+	videoFile + "#audio -out " + mpdDir + mpdName)
 
 	//USING THIS IN CASE WANT TO HAVE SEGMENTS REPLACED
@@ -1099,6 +1104,33 @@ func BentoDashIf(input BentoParam)error  {
 	}
 }
 
+// NON-MULTIPLEX VIDEO FROM MUX VIDEOSEG - VOD
+func CreateDashifFromMuxSeg(input MP4BoxParameter) error {
+	//Options described on https://gpac.wp.mines-telecom.fr/mp4box/dash/
+	cmdStr := config.MP4BOX
+	if(input.DashCTX) {cmdStr += " -dash-ctx " + input.MpdDirectory + "stream.txt"}
+	if(input.DashDuration != "") {cmdStr += " -dash " + input.DashDuration}
+	if(input.UseSegmentTimeline){cmdStr += " -segment-timeline"}
+	if(input.Profile != ""){cmdStr += " -profile " + input.Profile}
+	if(input.BitstreamSwitch != ""){cmdStr += " -bs-switching " + input.BitstreamSwitch}
+	if(input.RandomAccess){cmdStr += " -rap"}
+	if(input.FragDuration != ""){cmdStr += " -frag " + input.FragDuration}
+	cmdStr += " " + input.Video_Track1 + "#video"
+	cmdStr += " " + input.Video_Track2 + "#video"
+	cmdStr += " " + input.Video_Track3 + "#video"
+	cmdStr += " " + input.Video_Track1 + "#audio"
+	cmdStr += " -out " + input.MpdDirectory + input.MpdName
+
+	log.Println(cmdStr)
+	err := exec.Command("bash", "-c", cmdStr).Run()
+	if err != nil {
+		log.Println("Dash Err, ", err)
+		return err
+	} else {
+		return nil
+	}
+}
+
 type BentoParam struct {
 	InputVideo			string
 	OutputDir 			string
@@ -1124,3 +1156,31 @@ type BentoParam struct {
 	Notfdt				bool
 	ForceIframeSync		bool
 }
+
+
+
+type MP4BoxParameter struct{
+	Video_Track1 		string		//specifies input file
+	Video_Track2 		string		//multiple bitrate
+	Video_Track3 		string		//multiple birate
+	Audio_Track 		string
+	DashDuration 		string		//enables DASH segmentation of input files with the given segment duration in ms
+	FragDuration 		string		//specifies the duration of subsegments in ms
+	MpdDirectory 		string		//specifies output directory for MPD.
+	MpdName 			string		//specifies output file name for MPD.
+	Profile 			string		//specifies the target DASH profile
+	BitstreamSwitch 	string		//inband(default), merge, multi, no
+	DashCTX 				bool		//stores and restore DASH timing from FILE
+	UseSegmentTimeline 		bool		//uses SegmentTimeline when generating segments.
+	RandomAccess 			bool		//forces segments to begin with random access points.
+	FragmentRandomAccess	bool		//all fragments will begin with a random access points.
+	Dynamic 				bool		//uses dynamic MPD type instead of static (always set for -dash-live)
+	SegmentExt			string			//sets the segment extension. Default is m4s, null means no extension.
+	SegmentName			string			//sets the segment name for generated segments
+	TimeShift			string			//specifies MPD time shift buffer depth in seconds (default 0). Specify -1 to keep all files
+	MinBuffer			string			//specifies MPD min buffer time in milliseconds.
+	UseURLTemplate		bool			//uses SegmentTemplate instead of explicit sources in segments.
+	SingleSegment		bool			//uses a single segment for each representation. Set by default for onDemand profile.
+	SingleFile			bool			//uses a single file for each representation.
+}
+

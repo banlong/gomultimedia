@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Image & Video Display</title>
+
+    <!--<p> Either Script or Iframe can be used for remote content</p>-->
+    <!--<script src="//content.jwplatform.com/players/RfqoGxAU-szOGam72.js"></script>-->
+
+    <script src="//content.jwplatform.com/libraries/S2xWVQ9r.js"></script>
+    <script src="dash.all.debug.js"></script>
+</head>
+<body>
+
+<h1>Player Using Dashjs </h1>
+
+<!-- Standard video.js embed with a DASH source -->
+<p>This is using embedded DASHJS - Playing DASH Content - LIVE</p>
+<video id="vid1" class="video-js vjs-default-skin" controls preload="auto" width="640" height="264">
+    <source src="http://localhost:9011/mpd/bug.mpd" type='application/dash+xml'>
+</video>
+
+<p>This is using embedded DASHJS - Playing DASH Content - VOD FROM LIVE</p>
+<video id="vid2" class="video-js vjs-default-skin" controls preload="auto" width="640" height="264">
+    <source src="factory/mpdlive/kd3.mpd" type='application/dash+xml'>
+</video>
+
+<script>
+    // Initalize the video.js player after videojs-contrib-dash has loaded
+    var myPlayer = videojs('vid1');
+    var myPlayer2 = videojs('vid2');
+</script>
+
+
+<p>Thumbnail From Server</p>
+<div id="imagearea">
+    <img src="/thumbnail/sample1.jpg">
+</div>
+<br>
+
+<p>MP4 From Server</p>
+<div id="player">
+    <video id="my_video" width="550" height="340" controls>
+        <source src="videos/quangha.mp4" type="video/mp4">
+        <!--<source src="movie.ogg" type="video/ogg">-->
+        Your browser does not support the video tag.
+    </video>
+</div>
+<br>
+
+<p>This is Iframe from JW - Video hosted on remote site</p>
+<iframe src="//content.jwplatform.com/players/RfqoGxAU-szOGam72.html" width="480" height="270" frameborder="0" scrolling="auto" allowfullscreen></iframe>
+
+<p> The below HSLs is not supported by WINDOWS, use  your Iphone or iOS device to view </p>
+M3U8 From Public Web
+<div id="hls-1">
+    <video controls
+           src="http://qthttp.apple.com.edgesuite.net/1010qwoeiuryfg/sl.m3u8">
+    </video>
+</div>
+<br>
+
+M3U8 From Server
+<div id="hsl-2">
+    <video width="352" height="198" controls>
+        <source src="/m3u/sample.m3u8" type="application/x-mpegURL">
+    </video>
+</div>
+
+<p>This is using embedded JWPlayer - Playing DASH Content - VOD</p>
+<div id="container"></div>
+<script>
+    jwplayer("container").setup({
+        file: "factory/mpd/kd2.mpd",
+        image: "/thumbnail/noM94KC7RhqMaJzKrt.png"
+    });
+
+</script>
+
+<p>This is using embedded JWPlayer - Playing DASH Content - LIVE</p>
+<div id="player-3"></div>
+<script>
+    jwplayer("player-3").setup({
+        file: "factory/mpd/kd2.mpd",
+        image: "/thumbnail/noM94KC7RhqMaJzKrt.png"
+    });
+
+
+</script>
+
+<p>This is an embedded JWPlayer - with Playlist</p>
+<div id="container2"></div>
+<script>
+    jwplayer("container2").setup({
+        playlist: "//content.jwplatform.com/feeds/F2YKWOWd.rss",
+        captions: {
+            color: "FFCC00",
+            backgroundColor: "000000",
+            backgroundOpacity: 50
+        }
+    });
+</script>
+</body>
+</html>
