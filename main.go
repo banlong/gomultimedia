@@ -10,6 +10,7 @@ import (
 	"time"
 	"strings"
 
+	"gomultimedia/factory"
 )
 
 func main(){
@@ -31,9 +32,14 @@ func main(){
 	//ffmpeg.MP4BoxAudioMux(video, audio)
 
 
-	ProduceDashAdaptiveFromDir()
+	//ProduceDashAdaptiveFromDir()
+
+	factory.ProduceVideo()
 }
 
+
+
+// Produce dash-if from video segments in a dir
 func ProduceDashAdaptiveFromDir()  error{
 	processStart := time.Now()
 	tempDir := "adaptive/"
@@ -91,10 +97,10 @@ func ProduceDashAdaptiveFromDir()  error{
 			Audio_Track: 		audioInput,
 			DashDuration:		"3000",
 			MpdDirectory:   	mpdDir,
-			MpdName: 			"bug.mpd",
+			MpdName: 		"bug.mpd",
 			UseSegmentTimeline:	true,
-			DashCTX: 			true,
-			Profile:			"live",
+			DashCTX: 		true,
+			Profile:		"live",
 			FragDuration:		"3000",
 			RandomAccess: 		true,
 			BitstreamSwitch: 	"merge",
@@ -112,7 +118,6 @@ func ProduceDashAdaptiveFromDir()  error{
 
 	return nil
 }
-
 
 //Test Bug: dash cannot play on chrome, error decoding
 //This module test to find the cause of the above issue
@@ -191,7 +196,7 @@ func ProduceDashIfFromSplitSeg() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -201,8 +206,8 @@ func ProduceDashIfFromSplitSeg() error{
 		Debug: 				false,
 		SegmentList: 		tempDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, _ := fObj.Split(sPam)
+
+	names, _ := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -272,7 +277,7 @@ func ProduceDashIfFromEncodedSeg3() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -282,8 +287,8 @@ func ProduceDashIfFromEncodedSeg3() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -358,7 +363,7 @@ func ProduceDashIfFromEncodedSeg2() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -368,8 +373,8 @@ func ProduceDashIfFromEncodedSeg2() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 
@@ -447,7 +452,7 @@ func ProduceDashIfFromEncodedSeg() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	splitDuration,
 		SegmentExt: 		".mp4",
@@ -457,8 +462,8 @@ func ProduceDashIfFromEncodedSeg() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, _ := fObj.Split(sPam)
+
+	names, _ := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -557,7 +562,7 @@ func ProduceDashIfLive() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -567,8 +572,8 @@ func ProduceDashIfLive() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 
 	splitTime := time.Since(splitStart)
 
@@ -649,7 +654,7 @@ func ProduceDash() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -659,8 +664,8 @@ func ProduceDash() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -732,7 +737,7 @@ func ProduceDash() error{
 
 //SPLIT WITH NEW FEATURE
 func TestNewSplit()  {
-		sPam := ffmpeg.FfmpegParam{
+		sPam := ffmpeg.FFMPEGParam{
 			InputVideo: "videos/trutinh.mp4",
 			SegmentDuration: "3",
 			SegmentExt: ".mp4",
@@ -742,9 +747,8 @@ func TestNewSplit()  {
 			Debug: false,
 			SegmentList:"factory/trutinh/list.txt",
 		}
-		fObj := ffmpeg.NewFfmpeg()
+		ffmpeg.Split(sPam)
 
-		fObj.Split(sPam)
 }
 
 func TestBentoDash()  {

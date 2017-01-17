@@ -1,4 +1,4 @@
-package main
+package factory
 
 import (
 	"log"
@@ -20,7 +20,46 @@ import (
 )
 
 
+func ProduceVideo()  {
+	//Flow: extract video -> insert key frames --> split at 3s
+	//Expectation:
+	// 1 - no black frame at the end & beginning of video, video play smooth
+	// 2 - Split exactly at 3 seconds segments (usually split at key frames, -->unequally segments)
+	// If this success, video dashing does not need segment timeline.
 
+	// Extract Video
+	//videoInputPath := "videos/TTGS.mp4"
+	//videoOutputPath := "producevideo/TTGS-v.mp4"
+	//audioOutput := "producevideo/TTGS-a.mp4"
+	//ffmpeg.ExtractAV(videoInputPath, videoOutputPath, audioOutput)
+
+	//Insert Keyframe
+
+
+
+	//Split Video
+	sPam := ffmpeg.FFMPEGParam{
+		InputVideo: "producevideo/TTGS.mp4",
+		SegmentDuration: "3",
+		SegmentExt: ".mp4",
+		SegmentName: "",
+		OutputLocation: "producevideo/v-segments/",
+		FrameRate: "30",
+		Debug: false,
+		SegmentList:"producevideo/list.txt",
+	}
+	ffmpeg.Split(sPam)
+
+
+	//Encoding
+
+
+	//Dashing
+
+
+
+
+}
 
 func ProduceDashIf() error{
 	//DashIF Producing, after produce had to modify the mpd
@@ -43,7 +82,7 @@ func ProduceDashIf() error{
 	splitStart := time.Now()
 	log.Println("start splitting file")
 
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -54,8 +93,8 @@ func ProduceDashIf() error{
 		SegmentList: 		segDir + "list.txt",
 	}
 
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -143,7 +182,7 @@ func ProduceVODDash() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -154,8 +193,8 @@ func ProduceVODDash() error{
 		SegmentList: 		segDir + "list.txt",
 	}
 
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -442,7 +481,7 @@ func SplitExtractEncode() error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -452,8 +491,8 @@ func SplitExtractEncode() error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 
 	splitTime := time.Since(splitStart)
 
@@ -524,7 +563,7 @@ func SplitAndExtract()  error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -534,8 +573,8 @@ func SplitAndExtract()  error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Extract Video
@@ -590,7 +629,7 @@ func SplitEncodeExtract()  error{
 	//Split file
 	splitStart := time.Now()
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -600,8 +639,8 @@ func SplitEncodeExtract()  error{
 		Debug: 				false,
 		SegmentList: 		segDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	splitTime := time.Since(splitStart)
 
 	//Encode Video
@@ -731,7 +770,7 @@ func TestSplitAndMerge()  {
 	duration := "10"
 	//Split file
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -741,8 +780,8 @@ func TestSplitAndMerge()  {
 		Debug: 				false,
 		SegmentList: 		tempDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	chunks := names.Len()
 	if(err == nil){
 		//Make sure trcd folder exist
@@ -803,7 +842,7 @@ func TestSplitAndMergeDistributedWorkers()  {
 	duration := "180"
 	//Split file
 	log.Println("start splitting file")
-	sPam := ffmpeg.FfmpegParam{
+	sPam := ffmpeg.FFMPEGParam{
 		InputVideo: 		srcFile,
 		SegmentDuration: 	duration,
 		SegmentExt: 		".mp4",
@@ -813,8 +852,8 @@ func TestSplitAndMergeDistributedWorkers()  {
 		Debug: 				false,
 		SegmentList: 		tempDir + "list.txt",
 	}
-	fObj := ffmpeg.NewFfmpeg()
-	names, err := fObj.Split(sPam)
+
+	names, err := ffmpeg.Split(sPam)
 	chunks := names.Len()
 	if(err == nil){
 		//Make sure trcd folder exist

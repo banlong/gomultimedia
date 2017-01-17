@@ -12,7 +12,6 @@ import (
 	"gomultimedia/tools"
 	"io/ioutil"
 	"path"
-
 )
 
 func init() {
@@ -79,6 +78,7 @@ func Transcode(oldFile string, destDir string,  name string, compressLevel strin
 	}
 }
 
+//Split video using MP4Box
 func SplitVideo(input string, seconds string, outputDir string) (*list.List, error){
 	//MP4Box -split 3 videos/duck.mp4 -out factory/segments/%s.mp4
 	log.Println("-- Splitting video...", input)
@@ -104,7 +104,7 @@ func SplitVideo(input string, seconds string, outputDir string) (*list.List, err
 }
 
 // SPLIT ONE MP4 INTO MULTIPLE MP4s WITH SAME LENGTH (SECONDS), n: seconds
-func Split(input string, seconds int, outputDir string, videoId string, ext string) (*list.List, error){
+func Split1(input string, seconds int, outputDir string, videoId string, ext string) (*list.List, error){
 	log.Println("-- Splitting video...", input)
 
 	//Make sure temp folder exist
@@ -150,6 +150,107 @@ func Split(input string, seconds int, outputDir string, videoId string, ext stri
 	}
 }
 
+//func Split(input FFMPEGParam) (*list.List, error){
+//	log.Println("-- Splitting video...", input)
+//	inputVideo := input.InputVideo
+//	outputDir := input.OutputLocation
+//	segmentDuration := input.SegmentDuration
+//	fileExt := input.SegmentExt
+//	frameRate := input.FrameRate
+//
+//
+//	//Make sure temp folder exist
+//	err := tools.CreateDir(outputDir)
+//	if(err != nil){
+//		return list.New(), err
+//	}
+//
+//	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
+//	// OPT 2 - Split input file into equally files with segment in seconds, -vcodec will allow split AVI
+//	//	cmd := config.FFMPEG + " -report -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+//	//			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
+//
+//	//	cmd := config.FFMPEG + " -report -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+//	//	" -f segment " + outputDir +  "%04d" + ext
+//
+//	//	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -f segment -segment_time " + strconv.Itoa(seconds) +
+//	//	" -vcodec copy -reset_timestamps 1 -map 0 -an " + outputDir +  "%04d" + ext
+//
+//	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
+//
+//	//Using this, split without reencode
+//	//cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+//	//	" -f segment " + outputDir +  "%04d" + ext
+//
+//	//This split script produce the list.txt contains all the file name
+//	//ffmpeg -i videos/asia-copy.mp4 -acodec copy -vcodec copy -segment_list list.txt -force_key_frames  expr:gte(t,n_forced*3) -segment_time 3 -f segment factory/segments/%04d.mp4
+//
+//	cmdStr := config.FFMPEG
+//
+//	if(inputVideo != ""){
+//		cmdStr += " -i " + inputVideo + " -acodec copy -vcodec copy"
+//	}else{
+//		return nil, errors.New("Input Video is missing")
+//	}
+//
+//	if input.Debug {
+//		cmdStr += " -debug "
+//	}
+//
+//	if segmentDuration != "" {
+//		cmdStr += " -segment_time " + segmentDuration + " -f segment"
+//	}
+//
+//	if frameRate != ""{
+//		cmdStr += " -r " + frameRate
+//	}
+//
+//	cmdStr += " " + outputDir +  "%04d" + fileExt
+//
+//	if input.DisplayCMD {
+//		log.Println("cmdStr:" ,cmdStr)
+//	}
+//	/* -------------------------------------------------------------------------------------------------- */
+//
+//	err = exec.Command("bash", "-c", cmdStr).Run()
+//	if err != nil {
+//		log.Println("--Split failure!", err.Error())
+//		return list.New(), err
+//	} else {
+//		log.Println("-- Split file completed")
+//		names:= tools.GetFileNames(outputDir)
+//		return names, nil
+//	}
+//}
+
+
+func Split(input FFMPEGParam) (*list.List, error){
+	log.Println("-- Splitting video...", input)
+	inputVideo := input.InputVideo
+	outputDir := input.OutputLocation
+	//segmentDuration := input.SegmentDuration
+	//fileExt := input.SegmentExt
+	//frameRate := input.FrameRate
+
+	//Get video duration
+	//secs := GetVideoDuration(inputVideo, "s")
+	secs := "375"
+	log.Println("Video Duration: ", secs)
+
+	cmdStr := "for i in $(seq -f \"%08g\" 0 3 " + secs +"); do " + config.FFMPEG + " --ss $i -t 3 -i " + inputVideo + " " + outputDir + "sg" + "-${i}.mp4; done"
+
+	/* -------------------------------------------------------------------------------------------------- */
+
+	err := exec.Command("bash", "-c", cmdStr).Run()
+	if err != nil {
+		log.Println("--Split failure!", err.Error())
+		return list.New(), err
+	} else {
+		log.Println("-- Split file completed")
+		names:= tools.GetFileNames(outputDir)
+		return names, nil
+	}
+}
 
 // MERGE MP4s FILES INTO ONE MP4
 func Merge(namesFile string, outputFolder string, outputFile string) error{
@@ -178,28 +279,6 @@ func Merge(namesFile string, outputFolder string, outputFile string) error{
 		log.Println("-- merging segment completed")
 		return nil
 	}
-}
-
-// GET SEGMENT DURATION - Return time in seconds
-func GetSegmentDuration(segmentFilePath string) (string, error) {
-
-	cmdStr := config.FFMPEG + " -i '" + segmentFilePath +
-	"' 2>&1 | grep \"Duration\" | cut -d ' ' -f 4 | sed s/,// | awk '{ split($1, A, \":\"); print A[3]; }'"
-
-	ffmpegCmd := exec.Command("sh", "-c", cmdStr)
-	ffmpegCmdOutput, cmdErr := ffmpegCmd.CombinedOutput();
-
-	if cmdErr != nil {
-		return "", cmdErr
-	}
-
-	//Trim trailing \n character
-	if(len(ffmpegCmdOutput) > 0){
-		ffmpegCmdOutput = ffmpegCmdOutput[:len(ffmpegCmdOutput)-1]
-		return string(ffmpegCmdOutput), nil
-	}
-	return "0", nil
-
 }
 
 // GET CODEC
@@ -258,6 +337,28 @@ func GetResolution(file string) (int, int, error) {
 	}
 }
 
+// GET SEGMENT DURATION - Return time in seconds
+func GetSegmentDuration(segmentFilePath string) (string, error) {
+
+	cmdStr := config.FFMPEG + " -i '" + segmentFilePath +
+		"' 2>&1 | grep \"Duration\" | cut -d ' ' -f 4 | sed s/,// | awk '{ split($1, A, \":\"); print A[3]; }'"
+
+	ffmpegCmd := exec.Command("sh", "-c", cmdStr)
+	ffmpegCmdOutput, cmdErr := ffmpegCmd.CombinedOutput();
+
+	if cmdErr != nil {
+		return "", cmdErr
+	}
+
+	//Trim trailing \n character
+	if(len(ffmpegCmdOutput) > 0){
+		ffmpegCmdOutput = ffmpegCmdOutput[:len(ffmpegCmdOutput)-1]
+		return string(ffmpegCmdOutput), nil
+	}
+	return "0", nil
+
+}
+
 // GET SEGMENT DURATION v2 - Return time in hh:mm:ss.ssss
 func GetDuration(file string) (string, error) {
 	cmd := fmt.Sprintln(config.FFPROBE + " -v error -show_entries format=duration" +
@@ -277,7 +378,7 @@ func GetDuration(file string) (string, error) {
 
 }
 
-// GET SEGMENT DURATION v2 - Return time in hh:mm:ss.ssss
+// GET SEGMENT DURATION v3 - Return time in hh:mm:ss.ssss
 func GetAviDuration(file string) (string, error) {
 	cmd := fmt.Sprintln(config.FFPROBE + " -v error -loglevel quiet -show_entries format=duration" +
 	" -of default=noprint_wrappers=1:nokey=1 -sexagesimal " + file)
@@ -292,7 +393,8 @@ func GetAviDuration(file string) (string, error) {
 	}
 }
 
-func GetDurationInMillisecond(file string) (string) {
+// GET SEGMENT DURATION v4
+func GetVideoDuration(file string, returnUnit string) (string) {
 	defaultTime := "3000"
 	cmd := fmt.Sprintln(config.FFPROBE + " -v error -loglevel quiet -show_entries format=duration" +
 	" -of default=noprint_wrappers=1:nokey=1 -sexagesimal " + file)
@@ -322,8 +424,15 @@ func GetDurationInMillisecond(file string) (string) {
 	mv, _ := strconv.Atoi(mm)
 	sv, _ := strconv.Atoi(ss)
 
-	val := (hv*3600 + mv*60 + sv)*1000
-	retval := strconv.Itoa(val)
+	retval :="0"
+	if returnUnit == "ms"{
+		val := (hv*3600 + mv*60 + sv)*1000
+		retval = strconv.Itoa(val)
+	}else if returnUnit == "s"{
+		val := (hv*3600 + mv*60 + sv)
+		retval = strconv.Itoa(val)
+	}
+
 	return retval
 }
 
@@ -633,7 +742,6 @@ func MP4BoxMux(video string, audio string, newfile string)error{
 	}
 }
 
-
 func ExtractElementaryStream(input string, vOuput string) error{
 	//Extract the raw video codec data as it is.
 	//The extracted elementary streams are lacking the Video Object Layer (VOL) and the upper layers.
@@ -891,7 +999,7 @@ func ProduceDash(duration int, mpdDir string, mpdName string, videoFile string, 
 	//" -out " + mpdDir + mpdName  +  " -add " + videoFile  + "#video -add " + videoFile + "#audio -fps 30 seg" )
 
 	//OPTION 4 - USING NON-MUX SEGMENTS - MULTIPLEX OPTION IV
-	// audio & video can be seperate (aac is accepted)
+	// audio & video can be separated (aac is accepted)
 	// RESULT: Dash segments append into init segment - Seeker Support
 	//cmd := fmt.Sprintln(config.MP4BOX +  " -dash-ctx " + mpdDir + "stream.txt -dash " + strconv.Itoa(duration) +
 	//" -mpd-refresh 3 -profile h264:live -rap "  + " -out " + mpdDir + mpdName  +
@@ -1131,56 +1239,4 @@ func CreateDashifFromMuxSeg(input MP4BoxParameter) error {
 	}
 }
 
-type BentoParam struct {
-	InputVideo			string
-	OutputDir 			string
-	OutputVideo			string
-	Profile 			string
-	MpdName 			string
-	InitSegName 		string
-	MinBuffDuration 	string
-	SmoothMpdName 		string
-	FramentDuration		string
-	TimeScale			string
-	TrackID				string
-	NoMedia 			bool
-	NoSplit 			bool
-	UseSegmentList 		bool
-	UseSegmentTimeLine 	bool
-	SmoothCompatible 	bool
-	Debug 				bool
-	UseExistingDir  	bool
-	IsQuiet             bool
-	RecreateIndex		bool
-	Trim 				bool
-	Notfdt				bool
-	ForceIframeSync		bool
-}
-
-
-
-type MP4BoxParameter struct{
-	Video_Track1 		string		//specifies input file
-	Video_Track2 		string		//multiple bitrate
-	Video_Track3 		string		//multiple birate
-	Audio_Track 		string
-	DashDuration 		string		//enables DASH segmentation of input files with the given segment duration in ms
-	FragDuration 		string		//specifies the duration of subsegments in ms
-	MpdDirectory 		string		//specifies output directory for MPD.
-	MpdName 			string		//specifies output file name for MPD.
-	Profile 			string		//specifies the target DASH profile
-	BitstreamSwitch 	string		//inband(default), merge, multi, no
-	DashCTX 				bool		//stores and restore DASH timing from FILE
-	UseSegmentTimeline 		bool		//uses SegmentTimeline when generating segments.
-	RandomAccess 			bool		//forces segments to begin with random access points.
-	FragmentRandomAccess	bool		//all fragments will begin with a random access points.
-	Dynamic 				bool		//uses dynamic MPD type instead of static (always set for -dash-live)
-	SegmentExt			string			//sets the segment extension. Default is m4s, null means no extension.
-	SegmentName			string			//sets the segment name for generated segments
-	TimeShift			string			//specifies MPD time shift buffer depth in seconds (default 0). Specify -1 to keep all files
-	MinBuffer			string			//specifies MPD min buffer time in milliseconds.
-	UseURLTemplate		bool			//uses SegmentTemplate instead of explicit sources in segments.
-	SingleSegment		bool			//uses a single segment for each representation. Set by default for onDemand profile.
-	SingleFile			bool			//uses a single file for each representation.
-}
 
