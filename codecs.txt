@@ -1,3 +1,8 @@
+for i in {0..375..3}; do
+	ffmpeg -report -ss $i -t 3 -i videos/TTGS.mp4 producevideo/ttgs-${i}.mp4
+done
+
+
 Codecs:
  D..... = Decoding supported
  .E.... = Encoding supported
