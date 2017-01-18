@@ -20,7 +20,7 @@ import (
 )
 
 
-func ProduceVideo()  {
+func DashFromEqualDurationSegments(){
 	//Flow: extract video -> insert key frames --> split at 3s
 	//Expectation:
 	// 1 - no black frame at the end & beginning of video, video play smooth
@@ -36,29 +36,63 @@ func ProduceVideo()  {
 	//Insert Keyframe
 
 
-
 	//Split Video
 	sPam := ffmpeg.FFMPEGParam{
-		InputVideo: "producevideo/TTGS.mp4",
+		InputVideo: "videos/DP.mp4",
 		SegmentDuration: "3",
 		SegmentExt: ".mp4",
 		SegmentName: "",
+		SegmentList: "",
 		OutputLocation: "producevideo/v-segments/",
 		FrameRate: "30",
 		Debug: false,
-		SegmentList:"producevideo/list.txt",
+		DisplayCMD: true,
 	}
-	ffmpeg.Split(sPam)
-
+	names, _ :=ffmpeg.Split2(sPam)
 
 	//Encoding
 
 
 	//Dashing
+	tempDir := "producevideo/"
+	segDir := tempDir + "v-segments/"
+	mpdDir := tempDir + "mpd/"
+	inputDir :=  tempDir + "temp/"
 
+	nameElement := names.Front()
+	tools.CreateDir(mpdDir)
+	tools.CreateDir(inputDir)
 
+	for (nameElement != nil){
+		filename := segDir + nameElement.Value.(string)
+		baseName := path.Base(filename)
+		parts := strings.Split(baseName, ".")
+		name := parts[0]
+		videoTrack := segDir + name + ".mp4"
 
+		//copy video file and audio to an input folder
+		video, _ := tools.GetBytes(videoTrack)
 
+		tools.SaveBinFile2Disk(video, inputDir, "seg.mp4")
+		videoInput := inputDir + "seg.mp4"
+
+		input:= ffmpeg.MP4BoxParameter{
+			Video_Track1: 		videoInput,
+			DashDuration:		"5000",
+			MpdDirectory:   	mpdDir,
+			MpdName: 		"bug.mpd",
+			UseSegmentTimeline:	false,
+			DashCTX: 		true,
+			Profile:		"live",
+			FragDuration:		"5000",
+			RandomAccess: 		true,
+		}
+
+		ffmpeg.CreateDashifFromMuxSeg(input)
+		nameElement = nameElement.Next()
+	}
+
+	log.Println("Dash Completed")
 }
 
 func ProduceDashIf() error{
@@ -88,8 +122,8 @@ func ProduceDashIf() error{
 		SegmentExt: 		".mp4",
 		SegmentName: 		"",
 		OutputLocation: 	segDir,
-		FrameRate: 			"30",
-		Debug: 				false,
+		FrameRate: 		"30",
+		Debug: 			false,
 		SegmentList: 		segDir + "list.txt",
 	}
 

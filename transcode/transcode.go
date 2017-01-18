@@ -12,6 +12,8 @@ import (
 	"gomultimedia/tools"
 	"io/ioutil"
 	"path"
+	"sync"
+	"errors"
 )
 
 func init() {
@@ -150,81 +152,158 @@ func Split1(input string, seconds int, outputDir string, videoId string, ext str
 	}
 }
 
-//func Split(input FFMPEGParam) (*list.List, error){
-//	log.Println("-- Splitting video...", input)
-//	inputVideo := input.InputVideo
-//	outputDir := input.OutputLocation
-//	segmentDuration := input.SegmentDuration
-//	fileExt := input.SegmentExt
-//	frameRate := input.FrameRate
-//
-//
-//	//Make sure temp folder exist
-//	err := tools.CreateDir(outputDir)
-//	if(err != nil){
-//		return list.New(), err
-//	}
-//
-//	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
-//	// OPT 2 - Split input file into equally files with segment in seconds, -vcodec will allow split AVI
-//	//	cmd := config.FFMPEG + " -report -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
-//	//			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
-//
-//	//	cmd := config.FFMPEG + " -report -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
-//	//	" -f segment " + outputDir +  "%04d" + ext
-//
-//	//	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -f segment -segment_time " + strconv.Itoa(seconds) +
-//	//	" -vcodec copy -reset_timestamps 1 -map 0 -an " + outputDir +  "%04d" + ext
-//
-//	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
-//
-//	//Using this, split without reencode
-//	//cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
-//	//	" -f segment " + outputDir +  "%04d" + ext
-//
-//	//This split script produce the list.txt contains all the file name
-//	//ffmpeg -i videos/asia-copy.mp4 -acodec copy -vcodec copy -segment_list list.txt -force_key_frames  expr:gte(t,n_forced*3) -segment_time 3 -f segment factory/segments/%04d.mp4
-//
-//	cmdStr := config.FFMPEG
-//
-//	if(inputVideo != ""){
-//		cmdStr += " -i " + inputVideo + " -acodec copy -vcodec copy"
-//	}else{
-//		return nil, errors.New("Input Video is missing")
-//	}
-//
-//	if input.Debug {
-//		cmdStr += " -debug "
-//	}
-//
-//	if segmentDuration != "" {
-//		cmdStr += " -segment_time " + segmentDuration + " -f segment"
-//	}
-//
-//	if frameRate != ""{
-//		cmdStr += " -r " + frameRate
-//	}
-//
-//	cmdStr += " " + outputDir +  "%04d" + fileExt
-//
-//	if input.DisplayCMD {
-//		log.Println("cmdStr:" ,cmdStr)
-//	}
-//	/* -------------------------------------------------------------------------------------------------- */
-//
-//	err = exec.Command("bash", "-c", cmdStr).Run()
-//	if err != nil {
-//		log.Println("--Split failure!", err.Error())
-//		return list.New(), err
-//	} else {
-//		log.Println("-- Split file completed")
-//		names:= tools.GetFileNames(outputDir)
-//		return names, nil
-//	}
-//}
 
+// TEST - EXPECT TO GIVE EQUALLY SEGMENTS
+func Split2(input FFMPEGParam) (*list.List, error){
+	log.Println("-- Splitting video...", input)
+	inputVideo := input.InputVideo
+	outputDir := input.OutputLocation
+	fileExt := input.SegmentExt
+	frameRate := input.FrameRate
+
+
+	//Make sure temp folder exist
+	err := tools.CreateDir(outputDir)
+	if(err != nil){
+		return list.New(), err
+	}
+
+
+	//TESTING >> This split video into 2-second segments
+	//ffmpeg -i videos/TTH.mp4 -c copy -map 0 -segment_list producevideo/list.txt -force_key_frames  "expr:gte(t,n_forced*3)" -f segment producevideo/v-segments/%04d.mp4
+
+
+	cmdStr := config.FFMPEG
+
+	if(inputVideo != ""){
+		//cmdStr += " -i " + inputVideo + " -acodec copy -vcodec copy"
+		cmdStr += " -i " + inputVideo + " -c copy -map 0"
+	}else{
+		return nil, errors.New("Input Video is missing")
+	}
+
+	if input.SegmentList != ""{
+		cmdStr += " -segment_list " + input.SegmentList
+	}
+
+	cmdStr += " -force_key_frames 'expr:gte(t,n_forced*3)'"		//force insert key frame each 3 seconds
+
+	if input.Debug {
+		cmdStr += " -report"
+	}
+
+	if frameRate != ""{
+		cmdStr += " -r " + frameRate
+	}
+
+	if input.SegmentDuration != "" {
+		cmdStr += " -segment_time " + input.SegmentDuration
+	}
+
+	cmdStr += " -f segment " + outputDir +  "%04d" + fileExt
+
+	if input.DisplayCMD {
+		log.Println("cmdStr:" ,cmdStr)
+	}
+	/* -------------------------------------------------------------------------------------------------- */
+
+	err = exec.Command("bash", "-c", cmdStr).Run()
+	if err != nil {
+		log.Println("--Split failure!", err.Error())
+		return list.New(), err
+	} else {
+		log.Println("-- Split file completed")
+		names:= tools.GetFileNames(outputDir)
+		return names, nil
+	}
+}
 
 func Split(input FFMPEGParam) (*list.List, error){
+	log.Println("-- Splitting video...", input)
+	inputVideo := input.InputVideo
+	outputDir := input.OutputLocation
+	segmentDuration := input.SegmentDuration
+	fileExt := input.SegmentExt
+	frameRate := input.FrameRate
+
+
+	//Make sure temp folder exist
+	err := tools.CreateDir(outputDir)
+	if(err != nil){
+		return list.New(), err
+	}
+
+	/* --------------------------COMMAND SECTION -------------------------------------------------------- */
+	// OPT 2 - Split input file into equally files with segment in seconds, -vcodec will allow split AVI
+	//	cmd := config.FFMPEG + " -report -i " + input + " -vcodec copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+	//			" -f segment -strict -2 " + outputDir + videoId + "-%04d" + ext
+
+	//	cmd := config.FFMPEG + " -report -i " + input + " -c copy -map 0 -segment_time " + strconv.Itoa(seconds) +
+	//	" -f segment " + outputDir +  "%04d" + ext
+
+	//	cmd := config.FFMPEG + " -report -i " + input + " -acodec copy -f segment -segment_time " + strconv.Itoa(seconds) +
+	//	" -vcodec copy -reset_timestamps 1 -map 0 -an " + outputDir +  "%04d" + ext
+
+	//ffmpeg -i fff.avi -acodec copy -f segment -segment_time 10 -vcodec copy -reset_timestamps 1 -map 0 -an fff%d.avi
+
+	//Using this, split without reencode
+	//cmd := config.FFMPEG + " -i " + input + " -acodec copy -vcodec copy  -segment_time " + strconv.Itoa(seconds) +
+	//	" -f segment " + outputDir +  "%04d" + ext
+
+	//This split script produce the list.txt contains all the file name, this will force to cut video at the nearest key frame --> not even durations
+	//ffmpeg -i videos/asia-copy.mp4 -acodec copy -vcodec copy -segment_list list.txt -force_key_frames  "expr:gte(t,n_forced*3)" -segment_time 3 -f segment factory/segments/%04d.mp4
+	//ffmpeg -i videos/TTH.mp4 -c copy -map 0 -segment_list producevideo/list.txt -force_key_frames  "expr:gte(t,n_forced*3)" -segment_time 3 -f segment producevideo/v-segments/%04d.mp4
+
+	//TESTING >> This split video into 2-second segments
+	//ffmpeg -i videos/TTH.mp4 -c copy -map 0 -segment_list producevideo/list.txt -force_key_frames  "expr:gte(t,n_forced*3)" -f segment producevideo/v-segments/%04d.mp4
+
+	// THis will split the video into 10s segment, provide un-equal duration
+	// /ffmpeg -i videos/TTH.mp4 -c copy -map 0 -segment_time 10 -f segment producevideo/v-segments/output%03d.mp4
+
+
+	cmdStr := config.FFMPEG
+
+	if(inputVideo != ""){
+		//cmdStr += " -i " + inputVideo + " -acodec copy -vcodec copy"
+		cmdStr += " -i " + inputVideo + " -c copy -map 0"
+	}else{
+		return nil, errors.New("Input Video is missing")
+	}
+
+	cmdStr += " -segment_list " + input.SegmentList
+
+	if input.Debug {
+		cmdStr += " -report"
+	}
+
+	if segmentDuration != "" {
+		cmdStr += " -segment_time " + segmentDuration + " -f segment"
+	}
+
+	if frameRate != ""{
+		cmdStr += " -r " + frameRate
+	}
+
+	cmdStr += " " + outputDir +  "%04d" + fileExt
+
+	if input.DisplayCMD {
+		log.Println("cmdStr:" ,cmdStr)
+	}
+	/* -------------------------------------------------------------------------------------------------- */
+
+	err = exec.Command("bash", "-c", cmdStr).Run()
+	if err != nil {
+		log.Println("--Split failure!", err.Error())
+		return list.New(), err
+	} else {
+		log.Println("-- Split file completed")
+		names:= tools.GetFileNames(outputDir)
+		return names, nil
+	}
+}
+
+
+func NewSplit(input FFMPEGParam, wg *sync.WaitGroup) (*list.List, error){
 	log.Println("-- Splitting video...", input)
 	inputVideo := input.InputVideo
 	outputDir := input.OutputLocation
@@ -233,14 +312,16 @@ func Split(input FFMPEGParam) (*list.List, error){
 	//frameRate := input.FrameRate
 
 	//Get video duration
-	//secs := GetVideoDuration(inputVideo, "s")
-	secs := "375"
-	log.Println("Video Duration: ", secs)
+	secs := GetVideoDuration(inputVideo, "s")
+	log.Println("video duration: ", secs)
+	cmdStr := "for i in {0.." + secs + "..3}; do" +
+		  "ffmpeg -report -ss $i -t 3 -i videos/TTH.mp4 producevideo/v-segments/tth-${i}.mp4"+
+		  "done"
 
-	cmdStr := "for i in $(seq -f \"%08g\" 0 3 " + secs +"); do " + config.FFMPEG + " --ss $i -t 3 -i " + inputVideo + " " + outputDir + "sg" + "-${i}.mp4; done"
-
-	/* -------------------------------------------------------------------------------------------------- */
-
+	//cmdStr := "for i in $(seq -f \"%08g\" 0 3 " + secs +"); do " + config.FFMPEG + " --ss $i -t 3 -i " + inputVideo + " " + outputDir + "sg" + "-${i}.mp4; done"
+	//
+	///* -------------------------------------------------------------------------------------------------- */
+	//
 	err := exec.Command("bash", "-c", cmdStr).Run()
 	if err != nil {
 		log.Println("--Split failure!", err.Error())
@@ -250,6 +331,9 @@ func Split(input FFMPEGParam) (*list.List, error){
 		names:= tools.GetFileNames(outputDir)
 		return names, nil
 	}
+
+	wg.Done()
+	return nil, nil
 }
 
 // MERGE MP4s FILES INTO ONE MP4
@@ -1224,12 +1308,18 @@ func CreateDashifFromMuxSeg(input MP4BoxParameter) error {
 	if(input.RandomAccess){cmdStr += " -rap"}
 	if(input.FragDuration != ""){cmdStr += " -frag " + input.FragDuration}
 	cmdStr += " " + input.Video_Track1 + "#video"
-	cmdStr += " " + input.Video_Track2 + "#video"
-	cmdStr += " " + input.Video_Track3 + "#video"
+	if input.Video_Track2 != ""{
+		cmdStr += " " + input.Video_Track2 + "#video"
+	}
+	if input.Video_Track3 != ""{
+		cmdStr += " " + input.Video_Track3 + "#video"
+	}
+
 	cmdStr += " " + input.Video_Track1 + "#audio"
+
 	cmdStr += " -out " + input.MpdDirectory + input.MpdName
 
-	log.Println(cmdStr)
+	//log.Println(cmdStr)
 	err := exec.Command("bash", "-c", cmdStr).Run()
 	if err != nil {
 		log.Println("Dash Err, ", err)

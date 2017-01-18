@@ -34,7 +34,7 @@ func main(){
 
 	//ProduceDashAdaptiveFromDir()
 
-	factory.ProduceVideo()
+	factory.DashFromEqualDurationSegments()
 }
 
 
@@ -202,8 +202,8 @@ func ProduceDashIfFromSplitSeg() error{
 		SegmentExt: 		".mp4",
 		SegmentName: 		"",
 		OutputLocation: 	tempDir,
-		FrameRate: 			"30",
-		Debug: 				false,
+		FrameRate: 		"",
+		Debug: 			false,
 		SegmentList: 		tempDir + "list.txt",
 	}
 
